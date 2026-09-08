@@ -3,6 +3,18 @@ from sqlalchemy import Column, Integer, String, Text, DateTime, Date, ForeignKey
 from sqlalchemy.orm import relationship
 from app.database import Base
 
+class AppMeta(Base):
+    """
+    Системные метаданные приложения (маркер инициализации БД, настройки).
+    Хранятся в самой базе, поэтому сохраняются при любых перезапусках сервера.
+    """
+    __tablename__ = "app_meta"
+
+    key = Column(String(50), primary_key=True)
+    value = Column(String(255), nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class ParseRecord(Base):
     """
     Основная модель истории и учета парсингов.

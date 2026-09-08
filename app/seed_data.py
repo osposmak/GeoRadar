@@ -1,25 +1,28 @@
 import os
 from datetime import date, timedelta
-from app.database import SessionLocal, BASE_DIR, DATA_DIR
-from app.models import ParseRecord
+from app.database import SessionLocal, DATA_DIR
+from app.models import ParseRecord, AppMeta
 
 SEEDED_FLAG_FILE = os.path.join(DATA_DIR, ".seeded")
 
 def seed_sample_data(force: bool = False):
     """
-    Заполняет базу демонстрационными данными ТОЛЬКО при первом запуске.
-    Если база была очищена пользователем, повторно не заполняется,
-    пока не будет вызван принудительный сброс (force=True).
+    Заполняет базу демонстрационными данными ТОЛЬКО при первом создании БД.
+    Проверяет маркер как в файле, так и в самой таблице AppMeta.
     """
-    if not force and os.path.exists(SEEDED_FLAG_FILE):
-        return
-
     db = SessionLocal()
     try:
+        # Проверяем маркер в самой базе данных
+        meta = db.query(AppMeta).filter(AppMeta.key == "initialized").first()
+        if meta and not force:
+            return
+
+        # Если в таблице записей уже что-то есть, не перезаливаем
         count = db.query(ParseRecord).count()
         if count > 0 and not force:
-            with open(SEEDED_FLAG_FILE, "w", encoding="utf-8") as f:
-                f.write("seeded")
+            if not meta:
+                db.add(AppMeta(key="initialized", value="1"))
+                db.commit()
             return
 
         today = date.today()
@@ -118,11 +121,21 @@ def seed_sample_data(force: bool = False):
         ]
 
         db.add_all(samples)
+        
+        # Фиксируем в базе маркер инициализации
+        if not meta:
+            db.add(AppMeta(key="initialized", value="seeded"))
+        else:
+            meta.value = "seeded"
+
         db.commit()
 
-        # Ставим маркер, что начальный сид произведён
-        with open(SEEDED_FLAG_FILE, "w", encoding="utf-8") as f:
-            f.write("seeded")
+        # Файловый маркер для локального режима
+        try:
+            with open(SEEDED_FLAG_FILE, "w", encoding="utf-8") as f:
+                f.write("seeded")
+        except Exception:
+            pass
 
         print("[GeoRadar] Демонстрационные данные загружены.")
     except Exception as e:
@@ -132,14 +145,24 @@ def seed_sample_data(force: bool = False):
         db.close()
 
 def clear_all_records():
-    """Полностью очищает базу данных и сохраняет флаг, чтобы не перезаливать демо."""
+    """Полностью очищает базу данных и фиксирует статус в AppMeta."""
     db = SessionLocal()
     try:
         db.query(ParseRecord).delete()
+        
+        meta = db.query(AppMeta).filter(AppMeta.key == "initialized").first()
+        if not meta:
+            db.add(AppMeta(key="initialized", value="cleared"))
+        else:
+            meta.value = "cleared"
+            
         db.commit()
-        # Создаем маркер, чтобы при перезапуске сервера не восстанавливались демо-данные
-        with open(SEEDED_FLAG_FILE, "w", encoding="utf-8") as f:
-            f.write("cleared_by_user")
+
+        try:
+            with open(SEEDED_FLAG_FILE, "w", encoding="utf-8") as f:
+                f.write("cleared_by_user")
+        except Exception:
+            pass
         return True
     except Exception as e:
         db.rollback()
