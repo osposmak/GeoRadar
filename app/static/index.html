@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GeoRadar CRM | Контроль парсинга Яндекс Карт и 2ГИС</title>
+  <link rel="icon" type="image/png" href="/static/img/favicon.png">
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="/static/css/style.css">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              navy: '#030E50',
+              deep: '#1E3FB2',
+              blue: '#2875FB',
+              soft: '#C3D7FC',
+              light: '#F0F5FF'
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-slate-50 text-slate-900 flex flex-col min-h-screen">
+
+  <!-- Top Header -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-xs">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        
+        <!-- Logo & Title -->
+        <div class="flex items-center gap-3 cursor-pointer select-none" onclick="switchTab('radar')">
+          <img src="/static/img/logo_icon.png" alt="GeoRadar Logo" class="h-10 w-auto object-contain hover:scale-105 transition-transform">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="font-black text-xl tracking-tight bg-gradient-to-r from-brand-navy via-brand-deep to-brand-blue bg-clip-text text-transparent">GeoRadar</span>
+              <span class="text-[10px] uppercase font-bold px-2 py-0.5 bg-blue-50 text-brand-deep border border-blue-200 rounded-full">CRM Core</span>
+            </div>
+            <p class="text-[11px] text-slate-400 font-medium">Контроль парсинга • Яндекс & 2ГИС</p>
+          </div>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <nav class="hidden md:flex items-center gap-1 bg-slate-100/90 p-1 rounded-2xl border border-slate-200/80">
+          <button onclick="switchTab('radar')" id="tab-radar-btn" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 bg-white text-brand-deep shadow-xs">
+            <i data-lucide="radar" class="w-4 h-4 text-brand-blue"></i>
+            Радар дублей
+          </button>
+          <button onclick="switchTab('journal')" id="tab-journal-btn" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 text-slate-600 hover:text-slate-900">
+            <i data-lucide="table" class="w-4 h-4"></i>
+            Журнал сборов
+            <span id="badge-total-count" class="text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.2 rounded-full ml-1">...</span>
+          </button>
+          <button onclick="switchTab('analytics')" id="tab-analytics-btn" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 text-slate-600 hover:text-slate-900">
+            <i data-lucide="bar-chart-3" class="w-4 h-4"></i>
+            Аналитика
+          </button>
+          <button onclick="switchTab('about')" id="tab-about-btn" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 text-slate-600 hover:text-slate-900">
+            <i data-lucide="wrench" class="w-4 h-4"></i>
+            Инструменты
+          </button>
+        </nav>
+
+        <!-- Right Quick Actions -->
+        <div class="flex items-center gap-2.5">
+          <button id="sound-toggle-btn" onclick="toggleSound()" title="Включить/выключить звуки маскота" class="p-2 text-slate-400 hover:text-brand-blue hover:bg-slate-100 rounded-xl transition-colors">
+            <i data-lucide="volume-2" id="sound-icon" class="w-4 h-4"></i>
+          </button>
+
+          <button onclick="openCreateModal()" class="bg-gradient-to-r from-brand-deep to-brand-blue hover:from-brand-navy hover:to-brand-deep text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-xs hover:shadow flex items-center gap-1.5 transition-all">
+            <i data-lucide="plus-circle" class="w-4 h-4"></i>
+            <span>Зафиксировать сбор</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Mobile Tab Navigation -->
+  <div class="md:hidden bg-white border-b border-slate-200 px-4 py-2 flex justify-around">
+    <button onclick="switchTab('radar')" class="text-xs font-bold text-brand-deep flex flex-col items-center gap-1">
+      <i data-lucide="radar" class="w-5 h-5"></i>
+      Радар
+    </button>
+    <button onclick="switchTab('journal')" class="text-xs font-bold text-slate-600 flex flex-col items-center gap-1">
+      <i data-lucide="table" class="w-5 h-5"></i>
+      Журнал
+    </button>
+    <button onclick="switchTab('analytics')" class="text-xs font-bold text-slate-600 flex flex-col items-center gap-1">
+      <i data-lucide="bar-chart-3" class="w-5 h-5"></i>
+      Аналитика
+    </button>
+    <button onclick="switchTab('about')" class="text-xs font-bold text-slate-600 flex flex-col items-center gap-1">
+      <i data-lucide="wrench" class="w-5 h-5"></i>
+      Инструменты
+    </button>
+  </div>
+
+  <!-- Main Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+    <!-- TAB 1: РАДАР ДУБЛЕЙ (ГЛАВНЫЙ ИНСТРУМЕНТ) -->
+    <section id="tab-radar" class="space-y-6">
+      
+      <!-- Hero Banner with Mascot & Interactive Search -->
+      <div class="relative overflow-hidden rounded-3xl brand-gradient text-white p-6 sm:p-8 shadow-xl">
+        
+        <!-- Background accents -->
+        <div class="absolute -right-12 -bottom-12 w-96 h-96 bg-brand-blue opacity-30 rounded-full blur-3xl pointer-events-none"></div>
+        <div class="absolute right-1/4 -top-12 w-64 h-64 bg-blue-400 opacity-20 rounded-full blur-2xl pointer-events-none"></div>
+
+        <div class="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+          
+          <!-- Left Col: Text & Mascot Greeting -->
+          <div class="lg:col-span-7 space-y-4">
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-brand-soft text-xs font-semibold border border-white/20">
+              <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              Защита от дублей парсинга активна
+            </div>
+            
+            <h1 class="text-2xl sm:text-4xl font-extrabold tracking-tight leading-tight">
+              Проверь связку перед началом сбора лидов
+            </h1>
+            
+            <p class="text-brand-soft text-xs sm:text-sm leading-relaxed max-w-xl">
+              Чтобы не тратить время сотрудников и ресурсы парсеров на повторы, введите город и нишу. Радарчик мгновенно проверит базу!
+            </p>
+
+            <!-- Quick Search Form -->
+            <form id="radar-check-form" onsubmit="handleRadarCheck(event)" class="pt-2">
+              <div class="bg-white/95 backdrop-blur-md p-3 rounded-2xl shadow-lg border border-white/40 flex flex-col sm:flex-row gap-3">
+                
+                <!-- City input -->
+                <div class="relative flex-1">
+                  <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1 px-1">Город</label>
+                  <div class="relative">
+                    <i data-lucide="map-pin" class="w-4 h-4 absolute left-3 top-3 text-brand-blue"></i>
+                    <input type="text" id="radar-city-input" list="cities-datalist" placeholder="Например: Тюмень" required
+                      class="w-full pl-9 pr-3 py-2 bg-slate-50 hover:bg-slate-100/80 focus:bg-white text-slate-900 rounded-xl border border-slate-200 focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20 outline-none text-xs font-bold transition-all">
+                  </div>
+                </div>
+
+                <!-- Niche input -->
+                <div class="relative flex-1">
+                  <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1 px-1">Ниша / Сфера</label>
+                  <div class="relative">
+                    <i data-lucide="briefcase" class="w-4 h-4 absolute left-3 top-3 text-brand-blue"></i>
+                    <input type="text" id="radar-niche-input" list="niches-datalist" placeholder="Например: Мебель" required
+                      class="w-full pl-9 pr-3 py-2 bg-slate-50 hover:bg-slate-100/80 focus:bg-white text-slate-900 rounded-xl border border-slate-200 focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20 outline-none text-xs font-bold transition-all">
+                  </div>
+                </div>
+
+                <!-- Submit Button -->
+                <div class="flex items-end">
+                  <button type="submit" id="radar-submit-btn" class="w-full sm:w-auto px-6 py-2.5 bg-gradient-to-r from-brand-blue to-brand-deep hover:from-blue-600 hover:to-brand-navy text-white rounded-xl font-bold text-xs shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 min-w-[140px]">
+                    <i data-lucide="search" class="w-4 h-4"></i>
+                    <span>Проверить</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Datalists for instant autocomplete -->
+              <datalist id="cities-datalist"></datalist>
+              <datalist id="niches-datalist"></datalist>
+            </form>
+
+            <!-- Popular Quick Tags -->
+            <div class="flex flex-wrap items-center gap-2 pt-1 text-xs text-brand-soft">
+              <span class="font-medium opacity-80 text-[11px]">Быстрый тест:</span>
+              <button type="button" onclick="setQuickSearch('Тюмень', 'Мебель')" class="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 text-white text-[11px] font-medium transition-colors">
+                📍 Тюмень + Мебель
+              </button>
+              <button type="button" onclick="setQuickSearch('Тюмень', 'Стоматологии')" class="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 text-white text-[11px] font-medium transition-colors">
+                📍 Тюмень + Стоматологии
+              </button>
+              <button type="button" onclick="setQuickSearch('Екатеринбург', 'Мебель')" class="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 text-white text-[11px] font-medium transition-colors">
+                📍 Екб + Мебель
+              </button>
+              <button type="button" onclick="setQuickSearch('Москва', 'Автосервисы')" class="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 text-white text-[11px] font-medium transition-colors">
+                📍 Москва + Автосервисы
+              </button>
+            </div>
+          </div>
+
+          <!-- Right Col: Interactive Mascot & Speech Bubble -->
+          <div class="lg:col-span-5 flex flex-col items-center justify-center relative">
+            
+            <!-- Mascot Speech Bubble -->
+            <div class="speech-bubble p-4 text-slate-800 text-xs font-semibold max-w-sm mb-3 text-center shadow-lg border-2 border-brand-soft/60">
+              <span id="mascot-speech-text">
+                Привет! Я <b>Радарчик</b> — твой штурман по картам. Введи город и нишу, и я мигом проверю, не парсил ли это кто-то из наших! 🐾
+              </span>
+            </div>
+
+            <!-- Mascot Illustration (with magnifying glass & geo pin) -->
+            <div class="relative cursor-pointer group" onclick="pokeMascot()">
+              <div class="w-48 h-48 sm:w-56 sm:h-56 relative flex items-center justify-center">
+                <img id="mascot-dynamic-img" src="/static/img/mascot_radar.png" alt="Mascot Radar" 
+                  class="w-48 h-48 sm:w-56 sm:h-56 object-contain filter drop-shadow-2xl transition-all duration-300 group-hover:scale-105 mascot-floating">
+              </div>
+              <div class="text-center mt-1">
+                <span class="inline-block px-3 py-0.5 rounded-full bg-black/30 backdrop-blur-sm text-[10px] font-bold text-white uppercase tracking-wider">
+                  Маскот Радарчик 🐾
+                </span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Verdict & Result Container (Dynamically Filled) -->
+      <div id="radar-verdict-container" class="hidden transition-all duration-300">
+        <!-- Injected via JavaScript -->
+      </div>
+
+      <!-- Quick KPI Stats under Radar -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        
+        <div class="card-hover bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3">
+          <div class="w-11 h-11 rounded-xl bg-blue-50 text-brand-blue flex items-center justify-center shrink-0">
+            <i data-lucide="database" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <p class="text-[11px] font-medium text-slate-500">Всего сборов в базе</p>
+            <h3 id="stat-total-parses" class="text-lg font-black text-slate-900">...</h3>
+          </div>
+        </div>
+
+        <div class="card-hover bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3">
+          <div class="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+            <i data-lucide="users" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <p class="text-[11px] font-medium text-slate-500">Собрано контактов</p>
+            <h3 id="stat-total-contacts" class="text-lg font-black text-slate-900">...</h3>
+          </div>
+        </div>
+
+        <div class="card-hover bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3">
+          <div class="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+            <i data-lucide="map" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <p class="text-[11px] font-medium text-slate-500">Охвачено городов</p>
+            <h3 id="stat-unique-cities" class="text-lg font-black text-slate-900">...</h3>
+          </div>
+        </div>
+
+        <div class="card-hover bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3">
+          <div class="w-11 h-11 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+            <i data-lucide="layers" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <p class="text-[11px] font-medium text-slate-500">Ниш в архиве</p>
+            <h3 id="stat-unique-niches" class="text-lg font-black text-slate-900">...</h3>
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- TAB 2: ЖУРНАЛ СБОРОВ (ТАБЛИЦА) -->
+    <section id="tab-journal" class="hidden space-y-6">
+      
+      <!-- Top Filters & Actions Bar -->
+      <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+        
+        <div class="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+          <div>
+            <h2 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+              <i data-lucide="table" class="w-5 h-5 text-brand-blue"></i>
+              Журнал парсингов и броней
+            </h2>
+            <p class="text-xs text-slate-500">Полный реестр поисков по городам, нишам и источникам карт</p>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2">
+            <!-- Clear database button -->
+            <button onclick="confirmClearDatabase()" class="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors">
+              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+              Очистить базу
+            </button>
+
+            <!-- Reset demo button -->
+            <button onclick="confirmResetDemo()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors" title="Восстановить примеры для теста">
+              <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+              Демо-данные
+            </button>
+
+            <button onclick="exportData('excel')" class="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors">
+              <i data-lucide="file-spreadsheet" class="w-3.5 h-3.5"></i>
+              Excel (.xlsx)
+            </button>
+            <button onclick="exportData('csv')" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors">
+              <i data-lucide="download" class="w-3.5 h-3.5"></i>
+              CSV
+            </button>
+            <button onclick="openCreateModal()" class="px-4 py-2 bg-brand-blue hover:bg-brand-deep text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all">
+              <i data-lucide="plus" class="w-4 h-4"></i>
+              Новый сбор
+            </button>
+          </div>
+        </div>
+
+        <!-- Filter Controls -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 pt-2 border-t border-slate-100">
+          
+          <!-- Search box -->
+          <div class="relative lg:col-span-2">
+            <i data-lucide="search" class="w-4 h-4 absolute left-3 top-3 text-slate-400"></i>
+            <input type="text" id="filter-search" oninput="debounceFilter()" placeholder="Поиск по городу, нише, заметке..."
+              class="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-brand-blue outline-none transition-all">
+          </div>
+
+          <!-- Source filter -->
+          <div>
+            <select id="filter-source" onchange="loadJournalData()" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-brand-blue outline-none">
+              <option value="Все">Все источники</option>
+              <option value="2ГИС">2ГИС</option>
+              <option value="Яндекс Карты">Яндекс Карты</option>
+              <option value="2ГИС + Яндекс">2ГИС + Яндекс</option>
+            </select>
+          </div>
+
+          <!-- Status filter -->
+          <div>
+            <select id="filter-status" onchange="loadJournalData()" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-brand-blue outline-none">
+              <option value="Все">Все статусы</option>
+              <option value="Завершено">Завершено</option>
+              <option value="В процессе">В процессе</option>
+              <option value="Запланировано">Запланировано</option>
+              <option value="Требует обновления">Требует обновления</option>
+            </select>
+          </div>
+
+          <!-- Reset Filter button -->
+          <div>
+            <button onclick="resetFilters()" class="w-full py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors">
+              <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+              Сбросить фильтры
+            </button>
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- Data Table -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider">
+              <tr>
+                <th class="py-3.5 px-4 whitespace-nowrap"># ID</th>
+                <th class="py-3.5 px-4 whitespace-nowrap">Город</th>
+                <th class="py-3.5 px-4 whitespace-nowrap">Ниша / Сфера</th>
+                <th class="py-3.5 px-4 whitespace-nowrap">Источник карт</th>
+                <th class="py-3.5 px-4 whitespace-nowrap">Статус</th>
+                <th class="py-3.5 px-4 whitespace-nowrap">Контакты</th>
+                <th class="py-3.5 px-4 whitespace-nowrap">Сотрудник</th>
+                <th class="py-3.5 px-4 whitespace-nowrap">Дата сбора</th>
+                <th class="py-3.5 px-4">Заметки</th>
+                <th class="py-3.5 px-4 text-right whitespace-nowrap">Действия</th>
+              </tr>
+            </thead>
+            <tbody id="journal-table-body" class="divide-y divide-slate-100 font-medium">
+              <!-- Dynamically populated via JS -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Table Footer / Count -->
+        <div class="bg-slate-50 border-t border-slate-200 px-4 py-3 flex items-center justify-between text-xs text-slate-500">
+          <div>Показано записей: <span id="journal-visible-count" class="font-bold text-slate-800">0</span></div>
+          <div class="flex items-center gap-2">
+            <span>База данных: SQLite</span>
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- TAB 3: АНАЛИТИКА -->
+    <section id="tab-analytics" class="hidden space-y-6">
+      
+      <!-- Analytics Header with mascot sitting with laptop -->
+      <div class="bg-gradient-to-r from-blue-900 via-brand-deep to-brand-blue text-white p-6 rounded-3xl shadow-lg flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="space-y-1">
+          <span class="px-3 py-1 rounded-full bg-white/10 text-brand-soft text-[11px] font-bold uppercase tracking-wider">
+            Сводный дашборд компании
+          </span>
+          <h2 class="text-xl sm:text-2xl font-black">Аналитика охвата городов и ниш</h2>
+          <p class="text-xs text-brand-soft max-w-lg">
+            Отслеживайте распределение парсинга по гео-сервисам, эффективность работы операторов и объемы собранной базы контактов.
+          </p>
+        </div>
+        <img src="/static/img/mascot_laptop.png" alt="Mascot with Laptop" class="w-32 h-32 object-contain drop-shadow-xl shrink-0">
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        
+        <!-- Sources Donut Chart -->
+        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+          <div>
+            <h3 class="font-bold text-slate-900 flex items-center gap-2">
+              <i data-lucide="pie-chart" class="w-4 h-4 text-brand-blue"></i>
+              Распределение по источникам
+            </h3>
+            <p class="text-xs text-slate-500">Доля парсингов в 2ГИС и Яндекс Картах</p>
+          </div>
+          <div class="h-64 relative flex items-center justify-center">
+            <canvas id="chart-sources"></canvas>
+          </div>
+        </div>
+
+        <!-- Status Breakdown Chart -->
+        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+          <div>
+            <h3 class="font-bold text-slate-900 flex items-center gap-2">
+              <i data-lucide="activity" class="w-4 h-4 text-emerald-600"></i>
+              Статусы сборов
+            </h3>
+            <p class="text-xs text-slate-500">Завершённые, в процессе и требующие обновления</p>
+          </div>
+          <div class="h-64 relative flex items-center justify-center">
+            <canvas id="chart-statuses"></canvas>
+          </div>
+        </div>
+
+        <!-- Top Cities Bar Chart -->
+        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+          <div>
+            <h3 class="font-bold text-slate-900 flex items-center gap-2">
+              <i data-lucide="map-pin" class="w-4 h-4 text-purple-600"></i>
+              ТОП городов по собранным контактам
+            </h3>
+            <p class="text-xs text-slate-500">Наибольшее количество лидов в разрезе регионов</p>
+          </div>
+          <div class="h-72 relative">
+            <canvas id="chart-top-cities"></canvas>
+          </div>
+        </div>
+
+        <!-- Top Niches Bar Chart -->
+        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+          <div>
+            <h3 class="font-bold text-slate-900 flex items-center gap-2">
+              <i data-lucide="briefcase" class="w-4 h-4 text-amber-600"></i>
+              ТОП ниш по активности сборов
+            </h3>
+            <p class="text-xs text-slate-500">Самые популярные направления бизнеса</p>
+          </div>
+          <div class="h-72 relative">
+            <canvas id="chart-top-niches"></canvas>
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- TAB 4: ИНСТРУМЕНТЫ (В РАЗРАБОТКЕ) -->
+    <section id="tab-about" class="hidden space-y-6">
+      
+      <div class="bg-white p-6 sm:p-10 rounded-3xl border border-slate-200 shadow-sm text-center relative overflow-hidden">
+        
+        <!-- Background accents -->
+        <div class="absolute -right-16 -top-16 w-80 h-80 bg-blue-100/50 rounded-full blur-3xl pointer-events-none"></div>
+        <div class="absolute -left-16 -bottom-16 w-80 h-80 bg-brand-soft/30 rounded-full blur-3xl pointer-events-none"></div>
+
+        <div class="relative z-10 max-w-2xl mx-auto space-y-6">
+          
+          <!-- Badge -->
+          <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-50 border border-blue-200 text-brand-deep text-xs font-bold shadow-2xs">
+            <span class="w-2 h-2 rounded-full bg-brand-blue animate-ping"></span>
+            <span>🏗️ Скоро открытие новых модулей</span>
+          </div>
+
+          <!-- Title & Subtitle -->
+          <div class="space-y-2">
+            <h2 class="text-2xl sm:text-4xl font-black text-slate-900 tracking-tight">
+              В разработке
+            </h2>
+            <p class="text-xs sm:text-sm text-slate-600 leading-relaxed max-w-lg mx-auto">
+              Здесь строятся новые специализированные инструменты для работы с базами: автопарсеры по расписанию, обогащение контактов и B2B CRM панель.
+            </p>
+          </div>
+
+          <!-- Construction Mascot Image -->
+          <div class="py-2 flex justify-center">
+            <div class="relative group cursor-pointer" onclick="pokeMascot()">
+              <img src="/static/img/mascot_construction.png" alt="Mascot Builder" 
+                class="w-80 sm:w-96 max-w-full h-auto object-contain filter drop-shadow-2xl transition-transform duration-300 group-hover:scale-105">
+            </div>
+          </div>
+
+          <!-- Speech bubble from builder mascot -->
+          <div class="bg-blue-50/80 border border-blue-200/80 rounded-2xl p-4 text-xs font-medium text-slate-700 shadow-2xs text-left flex items-start gap-3 max-w-lg mx-auto">
+            <span class="text-2xl shrink-0">👷‍♂️</span>
+            <div>
+              <span class="font-bold text-brand-deep block mb-0.5">Радарчик-Инженер:</span>
+              «Я уже надел каску, развернул чертежи и вместе с краном строю полноценную CRM-систему! Скоро наш инструмент станет незаменимым комбайном для лидогенерации!»
+            </div>
+          </div>
+
+          <!-- Feature Teasers -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-4 text-left">
+            
+            <div class="p-4 bg-slate-50 hover:bg-white rounded-2xl border border-slate-200/90 transition-all shadow-2xs space-y-1.5">
+              <div class="w-8 h-8 rounded-xl bg-blue-100 text-brand-blue flex items-center justify-center font-bold text-sm">
+                <i data-lucide="bot" class="w-4 h-4"></i>
+              </div>
+              <h4 class="font-bold text-xs text-slate-900">Авто-парсинг по расписанию</h4>
+              <p class="text-[11px] text-slate-500 leading-relaxed">
+                Автоматический мониторинг новых открывшихся заведений и фирм в 2ГИС и Яндекс без ручного запуска.
+              </p>
+            </div>
+
+            <div class="p-4 bg-slate-50 hover:bg-white rounded-2xl border border-slate-200/90 transition-all shadow-2xs space-y-1.5">
+              <div class="w-8 h-8 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center font-bold text-sm">
+                <i data-lucide="sparkles" class="w-4 h-4"></i>
+              </div>
+              <h4 class="font-bold text-xs text-slate-900">Обогащение контактов</h4>
+              <p class="text-[11px] text-slate-500 leading-relaxed">
+                Поиск сайтов, ИНН, социальных сетей (VK, Telegram) и прямых мобильных номеров директоров.
+              </p>
+            </div>
+
+            <div class="p-4 bg-slate-50 hover:bg-white rounded-2xl border border-slate-200/90 transition-all shadow-2xs space-y-1.5">
+              <div class="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center font-bold text-sm">
+                <i data-lucide="kanban" class="w-4 h-4"></i>
+              </div>
+              <h4 class="font-bold text-xs text-slate-900">CRM-воронка лидов</h4>
+              <p class="text-[11px] text-slate-500 leading-relaxed">
+                Распределение спарсенных карточек по менеджерам отдела продаж и учет сделок по стадиям.
+              </p>
+            </div>
+
+            <div class="p-4 bg-slate-50 hover:bg-white rounded-2xl border border-slate-200/90 transition-all shadow-2xs space-y-1.5">
+              <div class="w-8 h-8 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center font-bold text-sm">
+                <i data-lucide="git-merge" class="w-4 h-4"></i>
+              </div>
+              <h4 class="font-bold text-xs text-slate-900">Умная склейка дублей</h4>
+              <p class="text-[11px] text-slate-500 leading-relaxed">
+                Автоматическое слияние карточек из 2ГИС и Яндекс Карт в единую чистую организацию без повторов.
+              </p>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- Modal: Создать сбор -->
+  <div id="modal-create" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 space-y-5">
+      
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-blue-100 text-brand-blue flex items-center justify-center">
+            <i data-lucide="map-pin" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-slate-900 text-sm">Зафиксировать сбор в базе</h3>
+            <p class="text-xs text-slate-500">Добавление информации о проведенном или начатом поиске</p>
+          </div>
+        </div>
+        <button onclick="closeCreateModal()" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form id="form-create-parse" onsubmit="handleCreateParse(event)" class="space-y-4 text-xs">
+        
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Город *</label>
+            <input type="text" id="modal-city" required placeholder="Например: Тюмень"
+              class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold focus:bg-white focus:border-brand-blue outline-none">
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Ниша / Сфера бизнеса *</label>
+            <input type="text" id="modal-niche" required placeholder="Например: Мебель"
+              class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold focus:bg-white focus:border-brand-blue outline-none">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Источник карт *</label>
+            <select id="modal-source" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold focus:bg-white focus:border-brand-blue outline-none">
+              <option value="2ГИС">2ГИС</option>
+              <option value="Яндекс Карты">Яндекс Карты</option>
+              <option value="2ГИС + Яндекс" selected>2ГИС + Яндекс</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Статус задачи *</label>
+            <select id="modal-status" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold focus:bg-white focus:border-brand-blue outline-none">
+              <option value="Завершено" selected>Завершено</option>
+              <option value="В процессе">В процессе (бронь)</option>
+              <option value="Запланировано">Запланировано</option>
+              <option value="Требует обновления">Требует обновления</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Количество контактов</label>
+            <input type="number" id="modal-count" min="0" value="0"
+              class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold focus:bg-white focus:border-brand-blue outline-none">
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Ответственный сотрудник</label>
+            <input type="text" id="modal-operator" placeholder="Имя сотрудника" value="Менеджер"
+              class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold focus:bg-white focus:border-brand-blue outline-none">
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Дата сбора</label>
+          <input type="date" id="modal-date"
+            class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold focus:bg-white focus:border-brand-blue outline-none">
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Заметки / Особенности выгрузки</label>
+          <textarea id="modal-notes" rows="3" placeholder="Укажите детали (наличие мобильных телефонов, ссылки на файлы, комментарии)"
+            class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:bg-white focus:border-brand-blue outline-none"></textarea>
+        </div>
+
+        <div class="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+          <button type="button" onclick="closeCreateModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition-colors">
+            Отмена
+          </button>
+          <button type="submit" class="px-5 py-2 bg-brand-blue hover:bg-brand-deep text-white rounded-xl font-bold shadow-xs transition-all flex items-center gap-1.5">
+            <i data-lucide="check" class="w-4 h-4"></i>
+            Сохранить в базу
+          </button>
+        </div>
+
+      </form>
+
+    </div>
+  </div>
+
+  <!-- Modal: Редактирование записи -->
+  <div id="modal-edit" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 space-y-5">
+      
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+        <h3 class="font-bold text-slate-900 text-sm flex items-center gap-2">
+          <i data-lucide="edit-3" class="w-4 h-4 text-brand-blue"></i>
+          Редактирование сбора <span id="edit-id-display" class="text-brand-blue">#</span>
+        </h3>
+        <button onclick="closeEditModal()" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <form id="form-edit-parse" onsubmit="handleUpdateParse(event)" class="space-y-4 text-xs">
+        <input type="hidden" id="edit-id">
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Город *</label>
+            <input type="text" id="edit-city" required class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold outline-none focus:border-brand-blue">
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Ниша *</label>
+            <input type="text" id="edit-niche" required class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold outline-none focus:border-brand-blue">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Источник</label>
+            <select id="edit-source" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold outline-none">
+              <option value="2ГИС">2ГИС</option>
+              <option value="Яндекс Карты">Яндекс Карты</option>
+              <option value="2ГИС + Яндекс">2ГИС + Яндекс</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Статус</label>
+            <select id="edit-status" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold outline-none">
+              <option value="Завершено">Завершено</option>
+              <option value="В процессе">В процессе</option>
+              <option value="Запланировано">Запланировано</option>
+              <option value="Требует обновления">Требует обновления</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Собрано контактов</label>
+            <input type="number" id="edit-count" min="0" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold outline-none">
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Ответственный</label>
+            <input type="text" id="edit-operator" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold outline-none">
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Заметки</label>
+          <textarea id="edit-notes" rows="3" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium outline-none"></textarea>
+        </div>
+
+        <div class="flex items-center justify-between pt-3 border-t border-slate-100">
+          <button type="button" onclick="handleDeleteParse()" class="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl font-bold transition-colors flex items-center gap-1.5">
+            <i data-lucide="trash-2" class="w-4 h-4"></i>
+            Удалить запись
+          </button>
+          
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="closeEditModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold">
+              Отмена
+            </button>
+            <button type="submit" class="px-5 py-2 bg-brand-blue hover:bg-brand-deep text-white rounded-xl font-bold shadow transition-all">
+              Обновить
+            </button>
+          </div>
+        </div>
+
+      </form>
+
+    </div>
+  </div>
+
+  <!-- Modal: Подтверждение очистки базы -->
+  <div id="modal-clear-db" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4 text-center">
+      <div class="w-14 h-14 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+        <i data-lucide="alert-triangle" class="w-8 h-8"></i>
+      </div>
+      <h3 class="font-bold text-slate-900 text-lg">Очистить всю базу данных?</h3>
+      <p class="text-xs text-slate-600 leading-relaxed">
+        Все текущие записи о парсингах и собранных контактах будут безвозвратно удалены. Демонстрационные данные больше не будут автоматически появляться.
+      </p>
+      <div class="flex items-center justify-center gap-3 pt-2">
+        <button onclick="closeClearModal()" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold">
+          Отмена
+        </button>
+        <button onclick="executeClearDatabase()" class="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-md">
+          Да, очистить базу
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- Footer -->
+  <footer class="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-400 mt-auto">
+    <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+      <div class="flex items-center gap-2">
+        <img src="/static/img/favicon.png" alt="Icon" class="w-4 h-4 object-contain">
+        <span class="font-bold text-slate-700">GeoRadar CRM v1.2</span>
+        <span>•</span>
+        <span>Маскот Радарчик на страже чистоты базы 🐾</span>
+      </div>
+      <div class="text-slate-400">
+        Контроль парсинга Яндекс и 2ГИС карт
+      </div>
+    </div>
+  </footer>
+
+  <!-- Main JavaScript Application Logic -->
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
