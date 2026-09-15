@@ -86,8 +86,8 @@ function pokeMascot() {
 // Tab Switching
 function switchTab(tab) {
   currentTab = tab;
-  const tabs = ['radar', 'journal', 'analytics', 'about'];
-  
+  const tabs = ['radar', 'journal', 'analytics', 'offers', 'about'];
+
   tabs.forEach(t => {
     const el = document.getElementById(`tab-${t}`);
     const btn = document.getElementById(`tab-${t}-btn`);
@@ -107,6 +107,8 @@ function switchTab(tab) {
     loadAnalytics();
   } else if (tab === 'radar') {
     loadStatsSummary();
+  } else if (tab === 'offers') {
+    initOffersTab();
   }
 
   lucide.createIcons();

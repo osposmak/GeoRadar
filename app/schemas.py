@@ -84,3 +84,62 @@ class StatsSummary(BaseModel):
     sources_distribution: dict
     top_cities: List[NameCount]
     top_niches: List[NameCount]
+
+
+# -------------------------------------------------------------
+# Схемы модуля «AI Офферы» (холодный обзвон)
+# -------------------------------------------------------------
+
+class CallLeadOut(BaseModel):
+    id: int
+    source_file: Optional[str] = None
+    company_name: str
+    phone: Optional[str] = None
+    city: Optional[str] = None
+    niche: Optional[str] = None
+    address: Optional[str] = None
+    website: Optional[str] = None
+    extra_info: Optional[str] = None
+    offer_hook: Optional[str] = None
+    offer_text: Optional[str] = None
+    offer_objections: Optional[str] = None
+    offer_closing: Optional[str] = None
+    offer_error: Optional[str] = None
+    offer_generated_at: Optional[datetime] = None
+    call_status: str = "Новый"
+    call_notes: Optional[str] = None
+    called_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class CallLeadUpdate(BaseModel):
+    """Обновление итогов звонка оператором."""
+    call_status: Optional[str] = Field(None, description="Новый / Согласие / Отказ / Перезвонить / Не дозвонился")
+    call_notes: Optional[str] = None
+
+
+class CallStatusCount(BaseModel):
+    call_status: str
+    count: int
+
+
+class OffersStats(BaseModel):
+    total: int
+    with_offer: int
+    without_offer: int
+    by_status: dict
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class LoginResponse(BaseModel):
+    token: str
+    username: str
+    expires_at: datetime

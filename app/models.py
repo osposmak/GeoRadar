@@ -90,3 +90,40 @@ class Lead(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     company = relationship("Company", back_populates="leads")
+
+
+class CallLead(Base):
+    """
+    Лид из загруженной таблицы для холодного обзвона.
+
+    Жизненный цикл: строка загружается из Excel/CSV → нейросеть генерирует
+    персональный оффер (pitch) → оператор звонит и проставляет call_status
+    («Новый», «Согласие», «Отказ», «Перезвонить», «Не дозвонился»).
+    """
+    __tablename__ = "call_leads"
+
+    id = Column(Integer, primary_key=True, index=True)
+    source_file = Column(String(255), nullable=True, index=True)   # Имя загруженного файла
+    company_name = Column(String(255), nullable=False)             # Название компании
+    phone = Column(String(100), nullable=True, index=True)         # Телефон для звонка
+    city = Column(String(100), nullable=True)
+    niche = Column(String(150), nullable=True)
+    address = Column(String(255), nullable=True)
+    website = Column(String(255), nullable=True)
+    extra_info = Column(Text, nullable=True)                       # Прочие колонки из таблицы (сырой текст)
+
+    # Результат генерации нейросети
+    offer_hook = Column(Text, nullable=True)                       # Крючок: первые 10 секунд разговора
+    offer_text = Column(Text, nullable=True)                       # Основной оффер под боли бизнеса
+    offer_objections = Column(Text, nullable=True)                 # Отработка типичных возражений
+    offer_closing = Column(Text, nullable=True)                    # Закрытие: целевое действие
+    offer_error = Column(String(500), nullable=True)               # Последняя ошибка генерации (если была)
+    offer_generated_at = Column(DateTime, nullable=True)
+
+    # Результат звонка оператора
+    call_status = Column(String(50), default="Новый", index=True)  # Новый / Согласие / Отказ / Перезвонить / Не дозвонился
+    call_notes = Column(Text, nullable=True)                       # Комментарий оператора по итогам разговора
+    called_at = Column(DateTime, nullable=True)                    # Когда проставлен статус звонка
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

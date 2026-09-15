@@ -134,3 +134,35 @@ body {
 td, th {
   vertical-align: middle;
 }
+
+/* ---------- Модуль «AI Офферы» ---------- */
+
+/* Аккуратный скролл внутри блока оффера */
+.offers-offer-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.offers-offer-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.offers-offer-scroll::-webkit-scrollbar-thumb {
+  background: #DDD6FE;
+  border-radius: 4px;
+}
+.offers-offer-scroll::-webkit-scrollbar-thumb:hover {
+  background: #A78BFA;
+}
+
+/* Подсветка drop-зоны при перетаскивании файла */
+#offers-dropzone.drag-active {
+  border-color: #A78BFA !important;
+  background: rgba(167, 139, 250, 0.25) !important;
+  transform: scale(1.01);
+}
+
+/* Ограничение текста доп. информации в две строки */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

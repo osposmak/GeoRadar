@@ -69,6 +69,11 @@
             <i data-lucide="bar-chart-3" class="w-4 h-4"></i>
             Аналитика
           </button>
+          <button onclick="switchTab('offers')" id="tab-offers-btn" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 text-slate-600 hover:text-slate-900">
+            <i data-lucide="phone-call" class="w-4 h-4 text-violet-600"></i>
+            AI Офферы
+            <span id="badge-offers-count" class="text-[10px] bg-violet-100 text-violet-700 px-1.5 py-0.2 rounded-full hidden">0</span>
+          </button>
           <button onclick="switchTab('about')" id="tab-about-btn" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 text-slate-600 hover:text-slate-900">
             <i data-lucide="wrench" class="w-4 h-4"></i>
             Инструменты
@@ -103,6 +108,10 @@
     <button onclick="switchTab('analytics')" class="text-xs font-bold text-slate-600 flex flex-col items-center gap-1">
       <i data-lucide="bar-chart-3" class="w-5 h-5"></i>
       Аналитика
+    </button>
+    <button onclick="switchTab('offers')" class="text-xs font-bold text-slate-600 flex flex-col items-center gap-1">
+      <i data-lucide="phone-call" class="w-5 h-5"></i>
+      Офферы
     </button>
     <button onclick="switchTab('about')" class="text-xs font-bold text-slate-600 flex flex-col items-center gap-1">
       <i data-lucide="wrench" class="w-5 h-5"></i>
@@ -476,6 +485,166 @@
 
     </section>
 
+    <!-- TAB 3.5: AI ОФФЕРЫ (ИНСТРУМЕНТ ОБЗВОНА, ТОЛЬКО ДЛЯ АДМИНОВ) -->
+    <section id="tab-offers" class="hidden space-y-6">
+
+      <!-- Экран входа администратора -->
+      <div id="offers-login" class="max-w-md mx-auto pt-8">
+        <div class="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-5 text-center relative overflow-hidden">
+          <div class="absolute -right-12 -top-12 w-56 h-56 bg-violet-100/60 rounded-full blur-3xl pointer-events-none"></div>
+          <div class="relative z-10 space-y-5">
+            <div class="w-16 h-16 rounded-2xl bg-violet-100 text-violet-600 flex items-center justify-center mx-auto">
+              <i data-lucide="lock-keyhole" class="w-8 h-8"></i>
+            </div>
+            <div class="space-y-1.5">
+              <h2 class="text-xl font-black text-slate-900">Панель администратора</h2>
+              <p class="text-xs text-slate-500 leading-relaxed">Инструмент «AI Офферы» доступен только администраторам. Введите логин и пароль для входа.</p>
+            </div>
+
+            <form id="offers-login-form" onsubmit="handleOffersLogin(event)" class="space-y-3 text-left">
+              <div>
+                <label class="block font-bold text-slate-700 mb-1 text-xs">Логин</label>
+                <div class="relative">
+                  <i data-lucide="user" class="w-4 h-4 absolute left-3 top-3 text-slate-400"></i>
+                  <input type="text" id="offers-login-username" required autocomplete="username"
+                    class="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:bg-white focus:border-violet-400 outline-none transition-all"
+                    placeholder="Администратор">
+                </div>
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 mb-1 text-xs">Пароль</label>
+                <div class="relative">
+                  <i data-lucide="key-round" class="w-4 h-4 absolute left-3 top-3 text-slate-400"></i>
+                  <input type="password" id="offers-login-password" required autocomplete="current-password"
+                    class="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:bg-white focus:border-violet-400 outline-none transition-all"
+                    placeholder="••••••••">
+                </div>
+              </div>
+              <p id="offers-login-error" class="hidden text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2"></p>
+              <button type="submit" id="offers-login-submit" class="w-full py-2.5 bg-gradient-to-r from-violet-600 to-brand-deep hover:from-violet-700 hover:to-brand-navy text-white rounded-xl text-xs font-bold shadow-md transition-all flex items-center justify-center gap-2">
+                <i data-lucide="log-in" class="w-4 h-4"></i>
+                Войти в панель
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- Рабочая панель инструмента (видна после входа) -->
+      <div id="offers-tool" class="hidden space-y-6">
+
+        <!-- Шапка инструмента + загрузка файла -->
+        <div class="relative overflow-hidden rounded-3xl bg-gradient-to-r from-violet-700 via-brand-deep to-brand-blue text-white p-6 sm:p-8 shadow-xl">
+          <div class="absolute -right-12 -bottom-12 w-96 h-96 bg-brand-blue opacity-30 rounded-full blur-3xl pointer-events-none"></div>
+          <div class="relative z-10 grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+            <div class="space-y-3">
+              <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-xs font-semibold border border-white/20">
+                <i data-lucide="sparkles" class="w-3.5 h-3.5 text-violet-200"></i>
+                Нейросеть GLM-5.3 · грамотные офферы для созвонов
+              </div>
+              <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight leading-tight">
+                Загрузите таблицу — получите готовые скрипты звонков
+              </h1>
+              <p class="text-brand-soft text-xs leading-relaxed max-w-lg">
+                ИИ анализирует нишу, город и состояние сайта каждой компании и пишет персональный оффер: крючок, боль, отработку возражений и закрытие на встречу. Осталось позвонить и проставить результат.
+              </p>
+              <div class="flex items-center gap-2 pt-1">
+                <span id="offers-ai-status" class="inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-lg bg-black/25 backdrop-blur-sm">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                  Нейросеть подключена
+                </span>
+                <button onclick="handleOffersLogout()" class="inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors">
+                  <i data-lucide="log-out" class="w-3 h-3"></i>
+                  Выйти
+                </button>
+              </div>
+            </div>
+
+            <!-- Drag & Drop загрузка -->
+            <div id="offers-dropzone"
+              class="bg-white/10 backdrop-blur-md border-2 border-dashed border-white/40 hover:border-white/70 hover:bg-white/15 rounded-2xl p-6 text-center cursor-pointer transition-all"
+              onclick="document.getElementById('offers-file-input').click()">
+              <i data-lucide="file-spreadsheet" class="w-10 h-10 mx-auto mb-2 text-violet-200"></i>
+              <p class="text-sm font-bold">Перетащите Excel/CSV сюда</p>
+              <p class="text-[11px] text-brand-soft mt-1">или нажмите, чтобы выбрать файл (.xlsx, .csv) — колонки «Компания», «Телефон» определяются автоматически</p>
+              <input type="file" id="offers-file-input" accept=".xlsx,.xls,.csv" class="hidden" onchange="handleOffersUpload(this)">
+            </div>
+          </div>
+        </div>
+
+        <!-- Статистика + панель действий -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-slate-200 text-slate-700 flex items-center justify-center shrink-0"><i data-lucide="users" class="w-4.5 h-4.5"></i></div>
+              <div><p class="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Всего лидов</p><h3 id="offers-stat-total" class="text-lg font-black text-slate-900">0</h3></div>
+            </div>
+            <div class="p-3.5 rounded-2xl bg-violet-50 border border-violet-200/70 flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-violet-100 text-violet-600 flex items-center justify-center shrink-0"><i data-lucide="sparkles" class="w-4.5 h-4.5"></i></div>
+              <div><p class="text-[10px] font-bold text-violet-600 uppercase tracking-wide">С оффером</p><h3 id="offers-stat-with-offer" class="text-lg font-black text-slate-900">0</h3></div>
+            </div>
+            <div class="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200/70 flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0"><i data-lucide="check-check" class="w-4.5 h-4.5"></i></div>
+              <div><p class="text-[10px] font-bold text-emerald-600 uppercase tracking-wide">Согласие</p><h3 id="offers-stat-agreed" class="text-lg font-black text-slate-900">0</h3></div>
+            </div>
+            <div class="p-3.5 rounded-2xl bg-rose-50 border border-rose-200/70 flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0"><i data-lucide="phone-off" class="w-4.5 h-4.5"></i></div>
+              <div><p class="text-[10px] font-bold text-rose-600 uppercase tracking-wide">Отказ</p><h3 id="offers-stat-refused" class="text-lg font-black text-slate-900">0</h3></div>
+            </div>
+          </div>
+
+          <!-- Прогресс генерации -->
+          <div id="offers-progress-box" class="hidden p-3.5 rounded-2xl bg-violet-50 border border-violet-200 space-y-2">
+            <div class="flex items-center justify-between text-xs font-bold text-violet-800">
+              <span id="offers-progress-label" class="flex items-center gap-2">
+                <i data-lucide="loader" class="w-3.5 h-3.5 animate-spin"></i>
+                Генерирую офферы…
+              </span>
+              <button onclick="stopOffersGeneration()" class="text-[11px] px-2.5 py-1 bg-white border border-violet-300 rounded-lg text-violet-700 hover:bg-violet-100 transition-colors">Остановить</button>
+            </div>
+            <div class="h-2 bg-violet-200/70 rounded-full overflow-hidden">
+              <div id="offers-progress-bar" class="h-full bg-gradient-to-r from-violet-500 to-brand-blue rounded-full transition-all duration-300" style="width:0%"></div>
+            </div>
+            <p id="offers-progress-detail" class="text-[11px] text-violet-700 font-medium">0 / 0</p>
+          </div>
+
+          <!-- Фильтры и действия -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+            <div class="relative lg:col-span-2">
+              <i data-lucide="search" class="w-4 h-4 absolute left-3 top-3 text-slate-400"></i>
+              <input type="text" id="offers-search" oninput="debounceOffersFilter()" placeholder="Поиск по компании, телефону, нише…"
+                class="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-violet-400 outline-none transition-all">
+            </div>
+            <div>
+              <select id="offers-status-filter" onchange="loadOffersLeads()" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-violet-400 outline-none">
+                <option value="Все">Все статусы звонков</option>
+                <option value="Новый">Новые</option>
+                <option value="Согласие">Согласие</option>
+                <option value="Отказ">Отказ</option>
+                <option value="Перезвонить">Перезвонить</option>
+                <option value="Не дозвонился">Не дозвонился</option>
+              </select>
+            </div>
+            <div class="flex items-center gap-2">
+              <button onclick="startOffersGeneration()" id="offers-generate-btn" class="flex-1 px-4 py-2 bg-gradient-to-r from-violet-600 to-brand-blue hover:from-violet-700 hover:to-brand-deep text-white rounded-xl text-xs font-bold shadow-xs transition-all flex items-center justify-center gap-1.5">
+                <i data-lucide="zap" class="w-4 h-4"></i>
+                <span>Сгенерировать лиды</span>
+              </button>
+              <button onclick="confirmOffersClear()" title="Удалить всю базу обзвона" class="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-colors">
+                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Список лидов -->
+        <div id="offers-leads-list" class="space-y-4">
+          <!-- Injected via JavaScript -->
+        </div>
+
+      </div>
+    </section>
+
     <!-- TAB 4: ИНСТРУМЕНТЫ (В РАЗРАБОТКЕ) -->
     <section id="tab-about" class="hidden space-y-6">
       
@@ -793,5 +962,6 @@
 
   <!-- Main JavaScript Application Logic -->
   <script src="/static/js/app.js"></script>
+  <script src="/static/js/offers.js"></script>
 </body>
 </html>

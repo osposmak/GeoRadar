@@ -1,0 +1,337 @@
+"""
+Модуль «AI Офферы»: загрузка таблиц лидов, генерация офферов нейросетью,
+учёт результатов звонков. Доступен только администраторам.
+"""
+import csv
+import io
+from datetime import datetime
+from typing import List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from sqlalchemy import func, or_
+from sqlalchemy.orm import Session
+
+from app import config
+from app.ai_client import AIGenerationError, generate_pitch, is_configured
+from app.database import get_db
+from app.models import CallLead
+from app.routers.auth import require_admin
+from app.schemas import CallLeadOut, CallLeadUpdate, OffersStats
+
+router = APIRouter(prefix="/api/offers", tags=["AI Офферы"], dependencies=[Depends(require_admin)])
+
+ALLOWED_CALL_STATUSES = ["Новый", "Согласие", "Отказ", "Перезвонить", "Не дозвонился"]
+
+# Ключевые слова для автоопределения колонок таблицы
+COLUMN_PATTERNS = {
+    "company_name": ["назван", "компан", "организац", "фирм", "наименован", "имя", "company", "name", "organization", "firm"],
+    "phone": ["телефон", "тел", "номер", "мобиль", "связ", "phone", "tel", "mobile", "contact"],
+    "city": ["город", "населён", "населен", "регион", "city"],
+    "niche": ["ниш", "категор", "сфер", "вид деят", "рубрик", "специализ", "niche", "category"],
+    "address": ["адрес", "address", "ул.", "улица"],
+    "website": ["сайт", "домен", "web", "url", "ресурс"],
+}
+
+
+def _normalize_header(value) -> str:
+    return str(value or "").strip().lower()
+
+
+def _match_column(header: str, kind: str) -> bool:
+    return any(pattern in header for pattern in COLUMN_PATTERNS[kind])
+
+
+def _cell_str(value) -> str:
+    if value is None:
+        return ""
+    text = str(value).strip()
+    return "" if text.lower() in ("none", "nan", "null") else text
+
+
+def _cell_phone(value) -> str:
+    """Вытаскивает телефон из значения (число, «+7 999 …», несколько номеров)."""
+    text = _cell_str(value)
+    if not text:
+        return ""
+    # Оставляем цифры, +, запятые/точки с запятой как разделители нескольких номеров
+    cleaned = "".join(ch for ch in text if ch.isdigit() or ch in "+,;")
+    return cleaned[:200] or text[:100]
+
+
+def parse_table_rows(content: bytes, filename: str) -> List[dict]:
+    """Разбирает xlsx/xls/csv в список dict с нормализованными полями."""
+    lower_name = filename.lower()
+
+    rows: List[List[str]] = []
+    header_row: List[str] = []
+
+    if lower_name.endswith((".xlsx", ".xls")):
+        try:
+            from openpyxl import load_workbook
+        except ImportError:
+            raise HTTPException(status_code=500, detail="На сервере не установлена библиотека openpyxl")
+
+        try:
+            workbook = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Не удалось открыть Excel-файл. Сохраните его в формате .xlsx")
+
+        sheet = workbook.active
+        for row in sheet.iter_rows(values_only=True):
+            rows.append(["" if v is None else str(v) for v in row])
+        workbook.close()
+    else:
+        # CSV: пробуем utf-8, затем cp1251 (частый случай для выгрузок из 1С/Excel)
+        text = None
+        for encoding in ("utf-8-sig", "utf-8", "cp1251"):
+            try:
+                text = content.decode(encoding)
+                break
+            except UnicodeDecodeError:
+                continue
+        if text is None:
+            raise HTTPException(status_code=400, detail="Не удалось определить кодировку CSV-файла")
+
+        sample = text[:4096]
+        try:
+            dialect = csv.Sniffer().sniff(sample, delimiters=",;\t")
+            delimiter = dialect.delimiter
+        except csv.Error:
+            delimiter = ";" if sample.count(";") > sample.count(",") else ","
+        reader = csv.reader(io.StringIO(text), delimiter=delimiter)
+        rows = [row for row in reader]
+
+    rows = [row for row in rows if any(_cell_str(c) for c in row)]
+    if not rows:
+        raise HTTPException(status_code=400, detail="Файл пустой или не содержит данных")
+
+    # Определяем строку заголовка: если в первой строке есть телефонный/текстовый заголовок
+    first_normalized = [_normalize_header(c) for c in rows[0]]
+    looks_like_header = any(_match_column(h, kind) for h in first_normalized for kind in ("phone", "company_name", "website"))
+
+    mapping = {}
+    if looks_like_header:
+        header_row = rows[0]
+        data_rows = rows[1:]
+        used = set()
+        # Сначала специфичные колонки (телефон/сайт/город/ниша/адрес), затем название
+        for kind in ("phone", "website", "city", "niche", "address", "company_name"):
+            for idx, h in enumerate(first_normalized):
+                if idx in used or not h:
+                    continue
+                if _match_column(h, kind):
+                    mapping[kind] = idx
+                    used.add(idx)
+                    break
+        # Название: если не нашли по заголовку — первая неиспользованная текстовая колонка
+        if "company_name" not in mapping:
+            for idx in range(len(header_row)):
+                if idx not in used:
+                    mapping["company_name"] = idx
+                    used.add(idx)
+                    break
+    else:
+        # Заголовка нет: первая заполненная колонка — название, любая колонка с телефоноподобным содержимым — телефон
+        data_rows = rows
+        mapping = {"company_name": 0}
+        phone_idx = None
+        for idx in range(1, len(rows[0])):
+            sample_values = [r[idx] for r in rows[1:6] if len(r) > idx]
+            digits = sum(1 for v in sample_values if sum(ch.isdigit() for ch in v) >= 6)
+            if sample_values and digits >= max(1, len(sample_values) // 2):
+                phone_idx = idx
+                break
+        if phone_idx is not None:
+            mapping["phone"] = phone_idx
+
+    leads: List[dict] = []
+    for row in data_rows:
+        def get(kind: str) -> str:
+            idx = mapping.get(kind)
+            if idx is None or idx >= len(row):
+                return ""
+            return _cell_str(row[idx])
+
+        company = get("company_name")
+        phone = _cell_phone(row[mapping["phone"]]) if "phone" in mapping and mapping["phone"] < len(row) else ""
+        if not company and not phone:
+            continue  # Полностью пустая смысла строка
+
+        # Прочие неиспользованные колонки — в подсказку для нейросети
+        used_indexes = set(mapping.values())
+        extra_parts = []
+        if header_row:
+            for idx, cell in enumerate(row):
+                if idx in used_indexes or idx >= len(header_row):
+                    continue
+                value = _cell_str(cell)
+                if value and _normalize_header(header_row[idx]):
+                    extra_parts.append(f"{header_row[idx].strip()}: {value}")
+        else:
+            for idx, cell in enumerate(row):
+                if idx in used_indexes:
+                    continue
+                value = _cell_str(cell)
+                if value:
+                    extra_parts.append(value)
+
+        leads.append({
+            "company_name": company or (phone or "Без названия"),
+            "phone": phone,
+            "city": get("city"),
+            "niche": get("niche"),
+            "address": get("address"),
+            "website": get("website"),
+            "extra_info": "; ".join(extra_parts)[:1000] or None,
+        })
+
+    if not leads:
+        raise HTTPException(status_code=400, detail="В таблице не найдено строк с названиями компаний или телефонами")
+    if len(leads) > config.UPLOAD_MAX_ROWS:
+        raise HTTPException(status_code=400, detail=f"Слишком большая таблица: максимум {config.UPLOAD_MAX_ROWS} строк за загрузку")
+    return leads
+
+
+@router.post("/upload", response_model=dict)
+async def upload_table(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    """Загружает Excel/CSV таблицу лидов и сохраняет строки в базу."""
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Файл не выбран")
+
+    lower_name = file.filename.lower()
+    if not lower_name.endswith((".xlsx", ".xls", ".csv")):
+        raise HTTPException(status_code=400, detail="Поддерживаются форматы .xlsx, .xls и .csv")
+
+    content = await file.read()
+    if len(content) > config.UPLOAD_MAX_SIZE_MB * 1024 * 1024:
+        raise HTTPException(status_code=400, detail=f"Файл больше {config.UPLOAD_MAX_SIZE_MB} МБ")
+
+    leads = parse_table_rows(content, file.filename)
+
+    objects = [
+        CallLead(source_file=file.filename, **lead)
+        for lead in leads
+    ]
+    db.add_all(objects)
+    db.commit()
+
+    return {
+        "status": "ok",
+        "inserted": len(objects),
+        "source_file": file.filename,
+        "message": f"Загружено {len(objects)} компаний из «{file.filename}»"
+    }
+
+
+@router.get("/leads", response_model=List[CallLeadOut])
+def get_leads(
+    status: Optional[str] = Query(None, description="Фильтр по статусу звонка"),
+    search: Optional[str] = Query(None, description="Поиск по названию/телефону/нише"),
+    only_without_offer: bool = Query(False, description="Только лиды без оффера"),
+    limit: int = Query(500, ge=1, le=2000),
+    db: Session = Depends(get_db)
+):
+    query = db.query(CallLead)
+    if status and status != "Все":
+        query = query.filter(CallLead.call_status == status)
+    if only_without_offer:
+        query = query.filter(CallLead.offer_text.is_(None))
+    if search:
+        s = f"%{search.strip()}%"
+        query = query.filter(or_(
+            CallLead.company_name.ilike(s),
+            CallLead.phone.ilike(s),
+            CallLead.niche.ilike(s),
+            CallLead.city.ilike(s),
+        ))
+    return query.order_by(CallLead.id.asc()).offset(0).limit(limit).all()
+
+
+@router.get("/stats", response_model=OffersStats)
+def get_stats(db: Session = Depends(get_db)):
+    total = db.query(CallLead).count()
+    with_offer = db.query(CallLead).filter(CallLead.offer_text.isnot(None)).count()
+
+    status_counts = dict(db.query(CallLead.call_status, func.count(CallLead.id)).group_by(CallLead.call_status).all())
+
+    return OffersStats(
+        total=total,
+        with_offer=with_offer,
+        without_offer=total - with_offer,
+        by_status=status_counts
+    )
+
+
+@router.post("/leads/{lead_id}/generate", response_model=CallLeadOut)
+def generate_offer(lead_id: int, db: Session = Depends(get_db)):
+    """Генерирует персональный оффер для одного лида через нейросеть."""
+    if not is_configured():
+        raise HTTPException(status_code=503, detail="Нейросеть не настроена на сервере (AI_API_URL/AI_API_KEY)")
+
+    lead = db.query(CallLead).filter(CallLead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Лид не найден")
+
+    try:
+        pitch = generate_pitch({
+            "company_name": lead.company_name,
+            "phone": lead.phone,
+            "city": lead.city,
+            "niche": lead.niche,
+            "address": lead.address,
+            "website": lead.website,
+            "extra_info": lead.extra_info,
+        })
+    except AIGenerationError as e:
+        lead.offer_error = str(e)[:500]
+        db.commit()
+        raise HTTPException(status_code=502, detail=str(e))
+
+    lead.offer_hook = pitch["hook"]
+    lead.offer_text = pitch["offer"]
+    lead.offer_objections = pitch["objections"]
+    lead.offer_closing = pitch["closing"]
+    lead.offer_error = None
+    lead.offer_generated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(lead)
+    return lead
+
+
+@router.patch("/leads/{lead_id}", response_model=CallLeadOut)
+def update_lead(lead_id: int, update: CallLeadUpdate, db: Session = Depends(get_db)):
+    """Проставляет итог звонка (согласие/отказ/перезвонить) и комментарий."""
+    lead = db.query(CallLead).filter(CallLead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Лид не найден")
+
+    if update.call_status is not None:
+        if update.call_status not in ALLOWED_CALL_STATUSES:
+            raise HTTPException(status_code=400, detail=f"Недопустимый статус. Допустимо: {', '.join(ALLOWED_CALL_STATUSES)}")
+        lead.call_status = update.call_status
+        lead.called_at = None if update.call_status == "Новый" else datetime.utcnow()
+
+    if update.call_notes is not None:
+        lead.call_notes = update.call_notes.strip() or None
+
+    db.commit()
+    db.refresh(lead)
+    return lead
+
+
+@router.delete("/leads/{lead_id}")
+def delete_lead(lead_id: int, db: Session = Depends(get_db)):
+    lead = db.query(CallLead).filter(CallLead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Лид не найден")
+    db.delete(lead)
+    db.commit()
+    return {"status": "ok", "message": f"Лид #{lead_id} удалён"}
+
+
+@router.post("/clear")
+def clear_all(db: Session = Depends(get_db)):
+    """Полная очистка базы лидов обзвона."""
+    deleted = db.query(CallLead).delete()
+    db.commit()
+    return {"status": "ok", "deleted": deleted, "message": f"База обзвона очищена (удалено {deleted})"}
