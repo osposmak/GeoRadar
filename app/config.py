@@ -16,9 +16,9 @@ ADMIN_SESSION_TTL = int(os.environ.get("ADMIN_SESSION_TTL", str(12 * 60 * 60)))
 
 # ---------- Нейросеть для генерации офферов ----------
 # OpenAI-совместимый эндпоинт (…/v1), к которому добавляется /chat/completions.
-AI_API_URL = os.environ.get("AI_API_URL", "https://claude.opik.net/v1").rstrip("/")
-AI_API_KEY = os.environ.get("AI_API_KEY", "sk-SCuURzXtcdFGLps6MIqXIMO8yiX2N3OxhMPabacmgEE0Kz04")
-AI_MODEL = os.environ.get("AI_MODEL", "glm-5.3")
+AI_API_URL = os.environ.get("AI_API_URL", "https://api.atria-asi.ai/v1").rstrip("/")
+AI_API_KEY = os.environ.get("AI_API_KEY", "atr_XypP3FFfeBZE3EwgTgZnxcImplPbs6x5")
+AI_MODEL = os.environ.get("AI_MODEL", "Atria-Dawn-Preview")
 
 # Таймауты запроса к нейросети (сек): подключение / чтение.
 AI_CONNECT_TIMEOUT = 20

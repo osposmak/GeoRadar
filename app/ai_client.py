@@ -2,7 +2,7 @@
 Клиент нейросети для генерации офферов холодного обзвона.
 
 Работает с OpenAI-совместимым API (POST {AI_API_URL}/chat/completions).
-Модель: GLM-5.3. Ключ и адрес задаются в app/config.py.
+Модель: Atria-Dawn-Preview (reasoning-модель). Ключ и адрес задаются в app/config.py.
 """
 import json
 import re
@@ -144,10 +144,10 @@ def generate_pitch(lead: dict) -> dict:
             {"role": "user", "content": user_prompt}
         ],
         "temperature": 0.7,
-        # GLM-5.3 — reasoning-модель: сначала «думает» в reasoning_content,
-        # затем пишет ответ. Лимит должен покрывать размышления плюс готовый
-        # шаблон разговора с возражениями, иначе content приходит пустым
-        # с finish_reason="length".
+        # Atria-Dawn-Preview — reasoning-модель: сначала «думает» в
+        # reasoning_content, затем пишет ответ. Лимит должен покрывать
+        # размышления плюс готовый шаблон разговора с возражениями,
+        # иначе content приходит пустым с finish_reason="length".
         "max_tokens": 12000
     }
     headers = {
