@@ -4,6 +4,7 @@
 """
 import csv
 import io
+import re
 from datetime import datetime
 from typing import List, Optional
 
@@ -32,12 +33,58 @@ COLUMN_PATTERNS = {
     "website": ["сайт", "домен", "web", "url", "ресурс"],
 }
 
+# Заголовки колонок-«анализа сайта»: там лежат статусы, а не ссылки
+# (например, «Проверка сайта» → «🚫 Нет сайта в карточке»).
+WEBSITE_HEADER_STOP_WORDS = (
+    "проверк", "анализ", "слабые", "статус", "оценк", "есть сайт",
+    "наличие сайт", "нет сайт", "без сайт", "отсутств",
+)
+
+# Слова-маркеры статусов: значение с ними сайтом считать нельзя.
+WEBSITE_VALUE_STOP_RE = re.compile(
+    r"(нет\s*сайт|без\s*сайт|отсутств|не\s*указан|слабые\s*места|проверк|конструктор|"
+    r"поддомен|не\s*работает|брошен|ошибк|на\s*продаже|заглушк)",
+    re.IGNORECASE,
+)
+
+# Домен: латиница и кириллица (зоны .рф, .рус), отдельные метки через точку.
+DOMAIN_CANDIDATE_RE = re.compile(
+    r"(?<![A-Za-z0-9\u0400-\u04FF-])"
+    r"((?:[A-Za-z0-9\u0400-\u04FF](?:[A-Za-z0-9\u0400-\u04FF-]*[A-Za-z0-9\u0400-\u04FF])?\.)+"
+    r"[A-Za-z\u0400-\u04FF][A-Za-z0-9\u0400-\u04FF-]{1,})"
+    r"(?![A-Za-z0-9\u0400-\u04FF-])"
+)
+
+# Домены без схемы (http://…) признаём сайтом только в популярных зонах.
+TRUSTED_TLDS = {
+    "ru", "рф", "рус", "москва", "com", "net", "org", "su", "io", "biz", "info",
+    "site", "online", "shop", "store", "pro", "club", "tech", "space", "life",
+    "top", "xyz", "me", "app", "dev", "cloud", "media", "studio", "agency",
+    "digital", "market", "expert", "company", "business", "name", "mobi", "tv",
+    "kz", "by", "ua", "uz", "am", "ge", "md", "az", "kg", "tj",
+    "com.ru", "ru.com", "com.ua", "xn--p1ai", "xn--80asehdb",
+}
+
+# Агрегаторы, карты и мессенджеры: их ссылки сайтом компании не считаем.
+BLOCKED_DOMAINS = {
+    "2gis.ru", "2gis.com", "2gis.kz", "2gis.by", "yandex.ru", "yandex.com", "ya.ru",
+    "google.com", "google.ru", "goo.gl", "maps.google.com", "g.page", "avito.ru",
+    "wa.me", "api.whatsapp.com", "whatsapp.com", "t.me", "telegram.me", "telegram.org",
+    "vk.com", "vk.ru", "instagram.com", "facebook.com", "fb.me", "ok.ru",
+    "youtube.com", "youtu.be", "dzen.ru", "ozon.ru", "wildberries.ru",
+    "market.yandex.ru", "maps.yandex.ru",
+}
+
 
 def _normalize_header(value) -> str:
     return str(value or "").strip().lower()
 
 
 def _match_column(header: str, kind: str) -> bool:
+    # Колонки-«анализ сайта» («Проверка сайта», «Слабые места», «Есть сайт»)
+    # содержат текстовые статусы, а не ссылку — сайтом их считать нельзя.
+    if kind == "website" and any(stop in header for stop in WEBSITE_HEADER_STOP_WORDS):
+        return False
     return any(pattern in header for pattern in COLUMN_PATTERNS[kind])
 
 
@@ -56,6 +103,57 @@ def _cell_phone(value) -> str:
     # Оставляем цифры, +, запятые/точки с запятой как разделители нескольких номеров
     cleaned = "".join(ch for ch in text if ch.isdigit() or ch in "+,;")
     return cleaned[:200] or text[:100]
+
+
+def _extract_domain(text: str) -> str:
+    """Возвращает первый реальный домен из текста или пустую строку."""
+    for match in DOMAIN_CANDIDATE_RE.finditer(text or ""):
+        domain = match.group(1).lower()
+        if domain.startswith("www."):
+            domain = domain[4:]
+        tld = domain.rsplit(".", 1)[-1]
+        if domain in BLOCKED_DOMAINS or any(domain.endswith("." + blocked) for blocked in BLOCKED_DOMAINS):
+            continue
+        prefix = (text or "")[max(0, match.start() - 8):match.start()].lower()
+        has_scheme = "http" in prefix or prefix.endswith("//") or prefix.endswith("www.")
+        if has_scheme or tld in TRUSTED_TLDS:
+            return domain
+    return ""
+
+
+def _cell_website(value, strict: bool = True) -> str:
+    """
+    Достаёт из ячейки сайт компании.
+
+    В выгрузках рядом с сайтом часто идут колонки-статусы («Проверка сайта»,
+    «Слабые места»): их значения вида «🚫 Нет сайта в карточке» или
+    «🛠️ Слабые места · 40/100» сайтом не являются, иначе панель показывает
+    «есть сайт» там, где его нет.
+    """
+    text = _cell_str(value)
+    if not text:
+        return ""
+    has_scheme = bool(re.search(r"https?://|www\.", text, re.IGNORECASE))
+    if strict and not has_scheme and WEBSITE_VALUE_STOP_RE.search(text):
+        return ""
+    return _extract_domain(text)
+
+
+def _find_website_in_row(row: List[str], mapping: dict) -> str:
+    """
+    Ищет домен компании в остальных колонках строки.
+
+    Нужно, когда колонка «Сайт» в выгрузке — это статус, а настоящий адрес
+    сайта упомянут в другой колонке (например, в готовом оффере или контактах).
+    """
+    skip = set(mapping.values())
+    for idx, cell in enumerate(row):
+        if idx in skip:
+            continue
+        domain = _cell_website(cell, strict=False)
+        if domain:
+            return domain
+    return ""
 
 
 def parse_table_rows(content: bytes, filename: str) -> List[dict]:
@@ -157,6 +255,12 @@ def parse_table_rows(content: bytes, filename: str) -> List[dict]:
         if not company and not phone:
             continue  # Полностью пустая смысла строка
 
+        # Сайт: берём только реальный домен; если в колонке «Сайт» статус —
+        # ищем адрес сайта в остальных колонках строки.
+        website = _cell_website(get("website"))
+        if not website:
+            website = _find_website_in_row(row, mapping)
+
         # Прочие неиспользованные колонки — в подсказку для нейросети
         used_indexes = set(mapping.values())
         extra_parts = []
@@ -181,7 +285,7 @@ def parse_table_rows(content: bytes, filename: str) -> List[dict]:
             "city": get("city"),
             "niche": get("niche"),
             "address": get("address"),
-            "website": get("website"),
+            "website": website,
             "extra_info": "; ".join(extra_parts)[:1000] or None,
         })
 
@@ -335,3 +439,28 @@ def clear_all(db: Session = Depends(get_db)):
     deleted = db.query(CallLead).delete()
     db.commit()
     return {"status": "ok", "deleted": deleted, "message": f"База обзвона очищена (удалено {deleted})"}
+
+
+def repair_lead_websites(db: Session) -> int:
+    """
+    Чистит уже сохранённые сайты лидов от текстовых статусов.
+
+    Раньше в поле «Сайт» попадали значения колонок-анализов
+    («🚫 Нет сайта в карточке», «🛠️ Слабые места · 40/100»), из-за чего
+    панель показывала «есть сайт» у компаний без сайта. Функция удаляет
+    такие значения и, если домен упомянут в доп. информации, восстанавливает
+    его. Идемпотентна: повторный запуск ничего не меняет.
+
+    Возвращает количество исправленных лидов.
+    """
+    changed = 0
+    for lead in db.query(CallLead).all():
+        current = (lead.website or "").strip()
+        cleaned = _cell_website(lead.website) or _cell_website(lead.extra_info, strict=False)
+        if cleaned == current:
+            continue
+        lead.website = cleaned or None
+        changed += 1
+    if changed:
+        db.commit()
+    return changed

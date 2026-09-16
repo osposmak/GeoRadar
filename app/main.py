@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.database import init_db
+from app.database import SessionLocal, init_db
 from app.seed_data import seed_sample_data
 from app.routers import check, parses, analytics, export, auth, offers
 
@@ -43,6 +43,25 @@ def on_startup():
     """Инициализация базы данных и демо-записей при первом старте."""
     init_db()
     seed_sample_data()
+    _repair_offers_websites()
+
+
+def _repair_offers_websites():
+    """
+    Разовая самопроверка данных модуля «AI Офферы».
+
+    Убирает из поля «Сайт» текстовые статусы (например, «🚫 Нет сайта
+    в карточке»), попавшие туда из колонок-анализов при старых загрузках.
+    """
+    db = SessionLocal()
+    try:
+        fixed = offers.repair_lead_websites(db)
+        if fixed:
+            print(f"[AI Офферы] Исправлены некорректные значения сайта у {fixed} лидов")
+    except Exception as exc:  # noqa: BLE001 — приложение должно стартовать в любом случае
+        print(f"[AI Офферы] Не удалось проверить корректность сайтов: {exc}")
+    finally:
+        db.close()
 
 @app.get("/")
 def serve_home():
