@@ -21,8 +21,9 @@ AI_API_KEY = os.environ.get("AI_API_KEY", "atr_XypP3FFfeBZE3EwgTgZnxcImplPbs6x5"
 AI_MODEL = os.environ.get("AI_MODEL", "Atria-Dawn-Preview")
 
 # Таймауты запроса к нейросети (сек): подключение / чтение.
+# Чтение — с запасом: reasoning-модель может думать над шаблоном несколько минут.
 AI_CONNECT_TIMEOUT = 20
-AI_READ_TIMEOUT = 120
+AI_READ_TIMEOUT = 300
 
 # Лимиты загрузки таблиц
 UPLOAD_MAX_ROWS = 2000

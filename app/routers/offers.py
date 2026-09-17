@@ -4,7 +4,10 @@
 """
 import csv
 import io
+import queue
 import re
+import threading
+import time
 from datetime import datetime
 from typing import List, Optional
 
@@ -14,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from app import config
 from app.ai_client import AIGenerationError, generate_pitch, is_configured
-from app.database import get_db
+from app.database import SessionLocal, get_db
 from app.models import CallLead
 from app.routers.auth import require_admin
 from app.schemas import CallLeadOut, CallLeadUpdate, OffersStats
@@ -366,30 +369,75 @@ def get_stats(db: Session = Depends(get_db)):
     )
 
 
-@router.post("/leads/{lead_id}/generate", response_model=CallLeadOut)
-def generate_offer(lead_id: int, db: Session = Depends(get_db)):
-    """Генерирует персональный оффер для одного лида через нейросеть."""
-    if not is_configured():
-        raise HTTPException(status_code=503, detail="Нейросеть не настроена на сервере (AI_API_URL/AI_API_KEY)")
+# ---------- Фоновая генерация офферов (строго по одному) ----------
+#
+# Нейросети нужно 1–3 минуты на один оффер, поэтому запрос не ждёт ответ:
+# POST /generate мгновенно ставит лид в очередь, а отдельный поток-обработчик
+# генерирует офферы строго последовательно. Так массовая генерация не упирается
+# в таймауты хостинга и не заваливает шлюз параллельными запросами.
 
+_generation_queue: "queue.Queue[int]" = queue.Queue()
+_generation_lock = threading.Lock()
+_generation_state = {
+    "pending": [],    # id лидов, ждущих очереди
+    "current": None,  # id лида, который генерируется прямо сейчас
+    "done": 0,        # готово с момента запуска задачи
+    "failed": 0,      # ошибок с момента запуска задачи
+}
+_worker_started = False
+
+
+def _generation_progress() -> dict:
+    with _generation_lock:
+        return {
+            "pending": list(_generation_state["pending"]),
+            "current": _generation_state["current"],
+            "done": _generation_state["done"],
+            "failed": _generation_state["failed"],
+        }
+
+
+def _generate_pitch_with_retry(lead_data: dict, attempts: int = 3) -> dict:
+    """
+    Вызывает нейросеть с повторами для временных сбоев
+    (таймауты, 429/5xx от шлюза). Между попытками — пауза.
+    """
+    last_error: Optional[AIGenerationError] = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return generate_pitch(lead_data)
+        except AIGenerationError as exc:
+            last_error = exc
+            message = str(exc)
+            transient = "Сеть недоступна" in message or re.search(r"API вернул (429|5\d\d)", message) is not None
+            if not transient or attempt == attempts:
+                raise
+            time.sleep(10 * attempt)
+    raise last_error or AIGenerationError("Неизвестная ошибка генерации")
+
+
+def _process_lead_offer(db: Session, lead_id: int) -> bool:
+    """Генерирует и сохраняет оффер одного лида. Возвращает успех."""
     lead = db.query(CallLead).filter(CallLead.id == lead_id).first()
     if not lead:
-        raise HTTPException(status_code=404, detail="Лид не найден")
+        return False
+
+    lead_data = {
+        "company_name": lead.company_name,
+        "phone": lead.phone,
+        "city": lead.city,
+        "niche": lead.niche,
+        "address": lead.address,
+        "website": lead.website,
+        "extra_info": lead.extra_info,
+    }
 
     try:
-        pitch = generate_pitch({
-            "company_name": lead.company_name,
-            "phone": lead.phone,
-            "city": lead.city,
-            "niche": lead.niche,
-            "address": lead.address,
-            "website": lead.website,
-            "extra_info": lead.extra_info,
-        })
-    except AIGenerationError as e:
-        lead.offer_error = str(e)[:500]
+        pitch = _generate_pitch_with_retry(lead_data)
+    except AIGenerationError as exc:
+        lead.offer_error = str(exc)[:500]
         db.commit()
-        raise HTTPException(status_code=502, detail=str(e))
+        return False
 
     lead.offer_hook = pitch["hook"]
     lead.offer_text = pitch["offer"]
@@ -398,8 +446,88 @@ def generate_offer(lead_id: int, db: Session = Depends(get_db)):
     lead.offer_error = None
     lead.offer_generated_at = datetime.utcnow()
     db.commit()
-    db.refresh(lead)
-    return lead
+    return True
+
+
+def _generation_worker() -> None:
+    """Фоновый поток: забирает лиды из очереди и обрабатывает по одному."""
+    while True:
+        lead_id = _generation_queue.get()
+        with _generation_lock:
+            if lead_id in _generation_state["pending"]:
+                _generation_state["pending"].remove(lead_id)
+            _generation_state["current"] = lead_id
+
+        db = SessionLocal()
+        try:
+            success = _process_lead_offer(db, lead_id)
+        except Exception:  # noqa: BLE001 — поток не должен умирать
+            success = False
+            try:
+                db.rollback()
+                stale = db.query(CallLead).filter(CallLead.id == lead_id).first()
+                if stale:
+                    stale.offer_error = "Внутренняя ошибка при генерации, попробуйте ещё раз"
+                    db.commit()
+            except Exception:  # noqa: BLE001
+                pass
+        finally:
+            db.close()
+            with _generation_lock:
+                _generation_state["current"] = None
+                if success:
+                    _generation_state["done"] += 1
+                else:
+                    _generation_state["failed"] += 1
+            _generation_queue.task_done()
+
+
+def _ensure_worker() -> None:
+    global _worker_started
+    with _generation_lock:
+        if _worker_started:
+            return
+        _worker_started = True
+    threading.Thread(target=_generation_worker, daemon=True).start()
+
+
+@router.get("/status")
+def generation_status():
+    """Прогресс фоновой генерации: сколько в очереди, готово, ошибок."""
+    return _generation_progress()
+
+
+@router.post("/leads/{lead_id}/generate")
+def generate_offer(lead_id: int, db: Session = Depends(get_db)):
+    """
+    Ставит лид в очередь на генерацию оффера и сразу отвечает.
+    Сама генерация идёт в фоне, строго по одному лиду: клиент следит
+    за прогрессом через GET /api/offers/status.
+    """
+    if not is_configured():
+        raise HTTPException(status_code=503, detail="Нейросеть не настроена на сервере (AI_API_URL/AI_API_KEY)")
+
+    lead = db.query(CallLead).filter(CallLead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Лид не найден")
+
+    progress = _generation_progress()
+    if lead_id == progress["current"] or lead_id in progress["pending"]:
+        return {"status": "queued", "message": "Лид уже в очереди на генерацию", "progress": progress}
+
+    lead.offer_error = None
+    db.commit()
+
+    with _generation_lock:
+        _generation_state["pending"].append(lead_id)
+    _generation_queue.put(lead_id)
+    _ensure_worker()
+
+    return {
+        "status": "queued",
+        "message": "Оффер поставлен в очередь, генерация идёт в фоне",
+        "progress": _generation_progress(),
+    }
 
 
 @router.patch("/leads/{lead_id}", response_model=CallLeadOut)

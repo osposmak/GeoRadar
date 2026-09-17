@@ -14,6 +14,11 @@ let offersFilterTimeout = null;
 let offersGenerating = false;
 let offersGenerationStop = false;
 let offersAiConfigured = true;
+let offersStatusTimer = null;      // polling прогресса фоновой генерации
+let offersPollTotal = 0;           // сколько лидов поставили в очередь
+let offersPollTick = 0;            // счётчик опросов (для периодического обновления списка)
+let offersSinglePoll = false;      // генерация одного лида
+let offersBusyLeadIds = new Set(); // лиды, чьи офферы сейчас генерируются/в очереди
 
 // ---------- Токен и обёртка fetch ----------
 
@@ -400,6 +405,7 @@ function renderOffersLeads(leads) {
                   ${siteDomain
                     ? `<span class="inline-block max-w-full truncate align-bottom text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-100" title="Сайт: ${esc(siteDomain)}">🌐 ${esc(siteDomain)}</span>`
                     : `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-100">🚫 без сайта</span>`}
+                  ${offersBusyLeadIds.has(lead.id) ? `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-violet-50 text-violet-700 border border-violet-100 animate-pulse">⏳ генерирую оффер…</span>` : ''}
                 </div>
               </div>
             </div>
@@ -546,33 +552,23 @@ function renderOffersLeads(leads) {
 // ---------- Действия с лидами ----------
 
 async function generateOfferForLead(leadId) {
-  const card = document.getElementById(`offer-lead-${leadId}`);
-  if (card) {
-    const box = card.querySelector('.flex-1.min-w-0');
-    if (box) {
-      box.innerHTML = `
-        <div class="rounded-2xl border border-violet-200 bg-violet-50/60 p-4 h-full flex flex-col items-center justify-center gap-2 text-center">
-          <i data-lucide="loader" class="w-6 h-6 text-violet-500 animate-spin"></i>
-          <p class="text-xs font-bold text-violet-700">Нейросеть составляет оффер…</p>
-          <p class="text-[11px] text-violet-400">Обычно занимает 10–30 секунд</p>
-        </div>
-      `;
-      lucide.createIcons();
-    }
+  if (offersGenerating) {
+    showToast('Дождитесь окончания текущей генерации', 'info');
+    return;
   }
 
   try {
     const res = await offersFetch(`/api/offers/leads/${leadId}/generate`, { method: 'POST' });
     if (!res.ok) throw new Error(await offersErrorMessage(res, 'Ошибка генерации оффера'));
-    showToast('Оффер готов!', 'success');
-    playSound('pop');
+
+    // Сразу показываем «в работе», не дожидаясь первого опроса статуса
+    offersBusyLeadIds = new Set([leadId, ...offersBusyLeadIds]);
+    await loadOffersLeads();
+    showToast('Оффер в очереди — нейросеть генерирует его в фоне', 'info');
+    startOffersStatusPolling(1, true);
   } catch (err) {
-    if (err.message !== 'Требуется вход администратора') {
-      showToast(err.message, 'error');
-    }
+    if (err.message !== 'Требуется вход администратора') showToast(err.message, 'error');
   }
-  await loadOffersLeads();
-  await refreshOffersStats();
 }
 
 async function setOfferCallStatus(leadId, status) {
@@ -631,7 +627,7 @@ async function confirmOffersClear() {
   }
 }
 
-// ---------- Массовая генерация офферов ----------
+// ---------- Массовая генерация офферов (фоном, по одному) ----------
 
 async function startOffersGeneration() {
   if (offersGenerating) return;
@@ -651,59 +647,124 @@ async function startOffersGeneration() {
     return;
   }
 
-  if (!confirm(`Нейросеть составит офферы для ${targets.length} компаний. Продолжить?`)) return;
+  if (!confirm(`Нейросеть составит офферы для ${targets.length} компаний.\n\nГенерация идёт в фоне строго по одному лиду (по 1–3 минуты на оффер), страница может быть закрыта после запуска. Продолжить?`)) return;
 
   offersGenerating = true;
   offersGenerationStop = false;
   setOffersGeneratingUi(true);
 
-  let done = 0, failed = 0;
-  const total = targets.length;
   const progressBox = document.getElementById('offers-progress-box');
   const progressBar = document.getElementById('offers-progress-bar');
   const progressDetail = document.getElementById('offers-progress-detail');
-
   progressBox.classList.remove('hidden');
+  progressBar.style.width = '0%';
+  progressDetail.innerText = 'Ставлю лиды в очередь…';
 
+  // Просто ставим всё в очередь — сервер сам генерирует по одному
+  let queued = 0;
   for (const lead of targets) {
     if (offersGenerationStop) break;
-    progressDetail.innerText = `Обработано ${done + failed} из ${total} · ошибок: ${failed}`;
-    progressBar.style.width = `${Math.round(((done + failed) / total) * 100)}%`;
-
     try {
       const res = await offersFetch(`/api/offers/leads/${lead.id}/generate`, { method: 'POST' });
       if (!res.ok) throw new Error(await offersErrorMessage(res, 'ошибка'));
-      done++;
+      queued++;
+      progressDetail.innerText = `В очереди: ${queued} из ${targets.length}`;
     } catch (err) {
-      failed++;
       if (err.message === 'Требуется вход администратора') break;
     }
-
-    // Обновляем список каждые 3 лида, чтобы оператор видел готовые офферы на ходу
-    if ((done + failed) % 3 === 0) {
-      await loadOffersLeads();
-    }
   }
 
-  offersGenerating = false;
-  setOffersGeneratingUi(false);
-  progressBox.classList.add('hidden');
-
-  await loadOffersLeads();
-  await refreshOffersStats();
-
-  if (offersGenerationStop) {
-    showToast(`Генерация остановлена: готово офферов ${done}, ошибок ${failed}`, 'warning');
-  } else if (failed === 0) {
-    showToast(`Готово! Офферы составлены для ${done} компаний 🎉`, 'success');
-    playSound('safe');
-  } else {
-    showToast(`Готово: ${done} офферов, ошибок ${failed}. Ошибки можно повторить кнопкой у лида.`, 'warning');
+  if (queued === 0) {
+    showToast('Не удалось поставить лиды в очередь', 'error');
+    offersGenerating = false;
+    setOffersGeneratingUi(false);
+    progressBox.classList.add('hidden');
+    return;
   }
+
+  offersPollTotal = queued;
+  offersPollTick = 0;
+  startOffersStatusPolling(queued, false);
 }
 
 function stopOffersGeneration() {
   offersGenerationStop = true;
+  showToast('Новые лиды в очередь не пойдут, уже поставленные догенерируются', 'info');
+}
+
+// ---------- Опрос прогресса фоновой генерации ----------
+
+function startOffersStatusPolling(total, single) {
+  offersPollTotal = total;
+  offersPollTick = 0;
+  offersSinglePoll = Boolean(single);
+  if (offersStatusTimer) clearInterval(offersStatusTimer);
+  offersStatusTimer = setInterval(pollOffersStatus, 4000);
+  pollOffersStatus();
+}
+
+function stopOffersStatusPolling() {
+  if (offersStatusTimer) {
+    clearInterval(offersStatusTimer);
+    offersStatusTimer = null;
+  }
+  offersGenerating = false;
+  offersPollTotal = 0;
+  offersBusyLeadIds = new Set();
+  setOffersGeneratingUi(false);
+  const progressBox = document.getElementById('offers-progress-box');
+  if (progressBox) progressBox.classList.add('hidden');
+}
+
+async function pollOffersStatus() {
+  let status = null;
+  try {
+    const res = await offersFetch('/api/offers/status');
+    if (!res.ok) throw new Error('status');
+    status = await res.json();
+  } catch (err) {
+    return; // временная ошибка — повторим на следующем тике
+  }
+
+  const pendingList = status.pending || [];
+  const busyIds = new Set([...pendingList, ...(status.current ? [status.current] : [])]);
+  offersBusyLeadIds = busyIds;
+
+  const pendingCount = pendingList.length + (status.current ? 1 : 0);
+
+  if (offersPollTotal > 0 && !offersSinglePoll) {
+    const progressBar = document.getElementById('offers-progress-bar');
+    const progressDetail = document.getElementById('offers-progress-detail');
+    const processed = status.done + status.failed;
+    if (progressBar) progressBar.style.width = `${Math.min(100, Math.round((processed / offersPollTotal) * 100))}%`;
+    if (progressDetail) {
+      progressDetail.innerText = `Готово: ${status.done} · генерирую сейчас: ${status.current ? `#${status.current}` : '—'} · в очереди: ${pendingList.length} · ошибок: ${status.failed}`;
+    }
+  }
+
+  if (pendingCount === 0) {
+    stopOffersStatusPolling();
+    await loadOffersLeads();
+    await refreshOffersStats();
+
+    if (offersSinglePoll) {
+      showToast('Оффер готов!', 'success');
+      playSound('pop');
+    } else if (status.failed === 0) {
+      showToast(`Готово! Офферов составлено: ${status.done} 🎉`, 'success');
+      playSound('safe');
+    } else {
+      showToast(`Готово: ${status.done} офферов, ошибок ${status.failed}. Ошибки можно повторить кнопкой ↻ у лида.`, 'warning');
+    }
+    return;
+  }
+
+  // Пока идёт генерация — периодически подтягиваем готовые офферы в список
+  offersPollTick += 1;
+  if (offersPollTick % 3 === 0) {
+    await loadOffersLeads();
+    await refreshOffersStats();
+  }
 }
 
 function setOffersGeneratingUi(busy) {
@@ -711,8 +772,8 @@ function setOffersGeneratingUi(busy) {
   if (btn) {
     btn.disabled = busy;
     btn.innerHTML = busy
-      ? `<i data-lucide="loader" class="w-4 h-4 animate-spin"></i><span>Генерирую…</span>`
-      : `<i data-lucide="zap" class="w-4 h-4"></i><span>Сгенерировать лиды</span>`;
+      ? `<i data-lucide="loader" class="w-4 h-4 animate-spin"></i><span>Генерирую в фоне…</span>`
+      : `<i data-lucide="zap" class="w-4 h-4"></i><span>Сгенерировать офферы</span>`;
   }
   document.querySelectorAll('.offers-status-btn').forEach(b => b.disabled = busy);
   lucide.createIcons();
