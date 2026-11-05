@@ -4,6 +4,7 @@
 """
 import csv
 import io
+import json
 import queue
 import re
 import threading
@@ -34,6 +35,17 @@ COLUMN_PATTERNS = {
     "niche": ["ниш", "категор", "сфер", "вид деят", "рубрик", "специализ", "niche", "category"],
     "address": ["адрес", "address", "ул.", "улица"],
     "website": ["сайт", "домен", "web", "url", "ресурс"],
+    "site_status": ["статус сайта", "проверка сайта", "состояние сайта", "sitestatus"],
+    "draft_offer": ["готовый оффер", "оффер для звонка"],
+    "map_url": ["ссылка на карты", "ссылка на карточку", "карточка на картах"],
+    "email": ["email", "e-mail", "почта"],
+    "telegram": ["telegram", "телеграм"],
+    "whatsapp": ["whatsapp", "ватсап"],
+    "vk": ["вконтакте", "вк"],
+    "branches_count": ["точек в городе", "количество точек"],
+    "weak_points": ["слабые места", "слабые стороны"],
+    "source": ["источник"],
+    "checked_at": ["дата проверки"],
 }
 
 # Заголовки колонок-«анализа сайта»: там лежат статусы, а не ссылки
@@ -106,6 +118,105 @@ def _cell_phone(value) -> str:
     # Оставляем цифры, +, запятые/точки с запятой как разделители нескольких номеров
     cleaned = "".join(ch for ch in text if ch.isdigit() or ch in "+,;")
     return cleaned[:200] or text[:100]
+
+
+_CITY_SLUGS = {
+    "tyumen": "Тюмень",
+    "novosibirsk": "Новосибирск",
+    "moscow": "Москва",
+    "saint-petersburg": "Санкт-Петербург",
+    "spb": "Санкт-Петербург",
+    "ekaterinburg": "Екатеринбург",
+    "yekaterinburg": "Екатеринбург",
+    "kazan": "Казань",
+    "krasnodar": "Краснодар",
+    "krasnoyarsk": "Красноярск",
+    "ufa": "Уфа",
+    "samara": "Самара",
+    "omsk": "Омск",
+    "chelyabinsk": "Челябинск",
+    "voronezh": "Воронеж",
+    "perm": "Пермь",
+    "volgograd": "Волгоград",
+    "rostov": "Ростов-на-Дону",
+    "nizhny-novgorod": "Нижний Новгород",
+}
+
+
+def normalize_phones(raw):
+    phones = []
+    seen = set()
+    junk = 0
+    if raw is None:
+        return phones, junk
+    parts = re.split(r"[;,\n]+", str(raw))
+    for part in parts:
+        token = part.strip()
+        if not token:
+            continue
+        digits = re.sub(r"\D", "", token)
+        if not digits:
+            junk += 1
+            continue
+        if len(digits) <= 4 and phones and "+" not in token:
+            if phones[-1].get("extension"):
+                junk += 1
+            else:
+                phones[-1]["extension"] = digits
+            continue
+        if len(digits) == 10:
+            digits = "7" + digits
+        elif len(digits) == 11 and digits.startswith("8"):
+            digits = "7" + digits[1:]
+        if len(digits) != 11 or not digits.startswith("7"):
+            junk += 1
+            continue
+        code = digits[1:4]
+        if code == "000" or code.startswith("0"):
+            junk += 1
+            continue
+        number = "+" + digits
+        if number in seen:
+            continue
+        seen.add(number)
+        item = {"number": number}
+        if code == "800":
+            item["is_toll_free"] = True
+        phones.append(item)
+        if len(phones) >= 50:
+            break
+    return phones, junk
+
+
+def normalize_site_status(value):
+    text = str(value or "").strip().lower()
+    if not text:
+        return "unknown"
+    if "нет сайта" in text or "без сайта" in text or "no_site" in text or "отсутств" in text:
+        return "no_site"
+    if "не работает" in text or "ошибк" in text or "broken" in text or "💀" in text:
+        return "broken"
+    if "медлен" in text or "без ssl" in text or "без https" in text or "слаб" in text or "weak" in text:
+        return "weak"
+    if re.search(r"\bok\b", text) or "работает" in text or "хорош" in text:
+        return "ok"
+    return "unknown"
+
+
+def city_from_map_url(url):
+    text = str(url or "").strip()
+    if not text:
+        return ""
+    match = re.search(r"2gis\.(?:ru|com|kz|by)/([^/?#]+)", text, re.IGNORECASE)
+    slug = match.group(1).lower() if match else ""
+    if not slug:
+        match = re.search(r"https?://[^/]+/([^/?#]+)", text)
+        slug = match.group(1).lower() if match else ""
+    if not slug:
+        return ""
+    if slug in _CITY_SLUGS:
+        return _CITY_SLUGS[slug]
+    return slug.replace("-", " ").strip().capitalize()
 
 
 def _extract_domain(text: str) -> str:
@@ -215,8 +326,8 @@ def parse_table_rows(content: bytes, filename: str) -> List[dict]:
         header_row = rows[0]
         data_rows = rows[1:]
         used = set()
-        # Сначала специфичные колонки (телефон/сайт/город/ниша/адрес), затем название
-        for kind in ("phone", "website", "city", "niche", "address", "company_name"):
+        # Сначала специфичные колонки MapLeads, затем сайт/город/нишу/адрес и название
+        for kind in ("phone", "site_status", "draft_offer", "map_url", "email", "telegram", "whatsapp", "vk", "branches_count", "weak_points", "source", "checked_at", "website", "city", "niche", "address", "company_name"):
             for idx, h in enumerate(first_normalized):
                 if idx in used or not h:
                     continue
@@ -282,13 +393,41 @@ def parse_table_rows(content: bytes, filename: str) -> List[dict]:
                 if value:
                     extra_parts.append(value)
 
+        phones_list, _phone_junk = normalize_phones(phone)
+        map_url_value = get("map_url")
+        city_value = get("city") or city_from_map_url(map_url_value)
+        niche_value = get("niche")
+        if niche_value and city_value and niche_value.strip().lower() in ("г. " + city_value.lower(), city_value.lower()):
+            niche_value = ""
+        branches_digits = "".join(ch for ch in get("branches_count") if ch.isdigit())
+        branches_value = int(branches_digits) if branches_digits else None
+        checked_raw = get("checked_at")
+        checked_value = None
+        if checked_raw:
+            try:
+                checked_value = datetime.fromisoformat(checked_raw.replace("Z", "+00:00")).replace(tzinfo=None)
+            except ValueError:
+                checked_value = None
+        site_status_raw = get("site_status")
         leads.append({
             "company_name": company or (phone or "Без названия"),
-            "phone": phone,
-            "city": get("city"),
-            "niche": get("niche"),
+            "phone": phones_list[0]["number"] if phones_list else phone,
+            "phones": json.dumps(phones_list, ensure_ascii=False) if phones_list else None,
+            "city": city_value,
+            "niche": niche_value,
             "address": get("address"),
-            "website": website,
+            "website": website or None,
+            "site_status": normalize_site_status(site_status_raw) if site_status_raw else ("no_site" if not website else "unknown"),
+            "map_url": map_url_value or None,
+            "email": get("email") or None,
+            "telegram": get("telegram") or None,
+            "whatsapp": get("whatsapp") or None,
+            "vk": get("vk") or None,
+            "branches_count": branches_value,
+            "weak_points": get("weak_points") or None,
+            "source": get("source") or None,
+            "checked_at": checked_value,
+            "draft_offer": get("draft_offer") or None,
             "extra_info": "; ".join(extra_parts)[:1000] or None,
         })
 
@@ -297,6 +436,44 @@ def parse_table_rows(content: bytes, filename: str) -> List[dict]:
     if len(leads) > config.UPLOAD_MAX_ROWS:
         raise HTTPException(status_code=400, detail=f"Слишком большая таблица: максимум {config.UPLOAD_MAX_ROWS} строк за загрузку")
     return leads
+
+
+def _dedupe_key(lead: dict) -> str:
+    phones = []
+    raw_phones = lead.get("phones")
+    if raw_phones:
+        try:
+            phones = [p.get("number", "") for p in json.loads(raw_phones)]
+        except (ValueError, AttributeError):
+            phones = []
+    primary = phones[0] if phones else (lead.get("phone") or "")
+    digits = re.sub(r"\D", "", primary)
+    if digits:
+        return "phone:" + digits
+    return "company:" + (lead.get("company_name") or "").strip().lower() + "|" + (lead.get("city") or "").strip().lower()
+
+
+@router.post("/upload/preview", response_model=dict)
+async def preview_table(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    """Предпросмотр импорта: разбирает файл, ничего не сохраняя, считает дубли."""
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Файл не выбран")
+    lower_name = file.filename.lower()
+    if not lower_name.endswith((".xlsx", ".xls", ".csv")):
+        raise HTTPException(status_code=400, detail="Поддерживаются форматы .xlsx, .xls и .csv")
+    content = await file.read()
+    if len(content) > config.UPLOAD_MAX_SIZE_MB * 1024 * 1024:
+        raise HTTPException(status_code=400, detail=f"Файл больше {config.UPLOAD_MAX_SIZE_MB} МБ")
+    leads = parse_table_rows(content, file.filename)
+    existing = {_dedupe_key({"phone": phone, "company_name": name, "city": city}) for phone, name, city in db.query(CallLead.phone, CallLead.company_name, CallLead.city).all()}
+    seen = set()
+    duplicates = 0
+    for lead in leads:
+        key = _dedupe_key(lead)
+        if key in existing or key in seen:
+            duplicates += 1
+        seen.add(key)
+    return {"status": "ok", "total": len(leads), "new": len(leads) - duplicates, "duplicates": duplicates, "preview": leads[:10]}
 
 
 @router.post("/upload", response_model=dict)
@@ -315,18 +492,26 @@ async def upload_table(file: UploadFile = File(...), db: Session = Depends(get_d
 
     leads = parse_table_rows(content, file.filename)
 
-    objects = [
-        CallLead(source_file=file.filename, **lead)
-        for lead in leads
-    ]
+    existing = {_dedupe_key({"phone": phone, "company_name": name, "city": city}) for phone, name, city in db.query(CallLead.phone, CallLead.company_name, CallLead.city).all()}
+    seen = set()
+    objects = []
+    skipped = 0
+    for lead in leads:
+        key = _dedupe_key(lead)
+        if key in existing or key in seen:
+            skipped += 1
+            continue
+        seen.add(key)
+        objects.append(CallLead(source_file=file.filename, **lead))
     db.add_all(objects)
     db.commit()
 
     return {
         "status": "ok",
         "inserted": len(objects),
+        "skipped_duplicates": skipped,
         "source_file": file.filename,
-        "message": f"Загружено {len(objects)} компаний из «{file.filename}»"
+        "message": f"Загружено {len(objects)} компаний из «{file.filename}»" + (f", пропущено дублей: {skipped}" if skipped else "")
     }
 
 
@@ -369,18 +554,18 @@ def get_stats(db: Session = Depends(get_db)):
     )
 
 
-# ---------- Фоновая генерация офферов (строго по одному) ----------
+# ---------- Фоновая генерация офферов (параллелизм 3) ----------
 #
 # Нейросети нужно 1–3 минуты на один оффер, поэтому запрос не ждёт ответ:
-# POST /generate мгновенно ставит лид в очередь, а отдельный поток-обработчик
-# генерирует офферы строго последовательно. Так массовая генерация не упирается
-# в таймауты хостинга и не заваливает шлюз параллельными запросами.
+# POST /generate мгновенно ставит лид в очередь, а пул из 3 потоков-обработчиков
+# генерирует офферы параллельно (GENERATION_PARALLELISM = 3).
 
 _generation_queue: "queue.Queue[int]" = queue.Queue()
 _generation_lock = threading.Lock()
 _generation_state = {
     "pending": [],    # id лидов, ждущих очереди
-    "current": None,  # id лида, который генерируется прямо сейчас
+    "current": None,  # первый из генерируемых сейчас лидов (совместимость с UI)
+    "currents": [],   # id всех лидов в генерации (параллелизм 3)
     "done": 0,        # готово с момента запуска задачи
     "failed": 0,      # ошибок с момента запуска задачи
 }
@@ -392,12 +577,13 @@ def _generation_progress() -> dict:
         return {
             "pending": list(_generation_state["pending"]),
             "current": _generation_state["current"],
+            "currents": list(_generation_state["currents"]),
             "done": _generation_state["done"],
             "failed": _generation_state["failed"],
         }
 
 
-def _generate_pitch_with_retry(lead_data: dict, attempts: int = 3) -> dict:
+def _generate_pitch_with_retry(lead_data: dict, attempts: int = 3, hook_style: str = "A") -> dict:
     """
     Вызывает нейросеть с повторами для временных сбоев
     (таймауты, 429/5xx от шлюза). Между попытками — пауза.
@@ -405,7 +591,7 @@ def _generate_pitch_with_retry(lead_data: dict, attempts: int = 3) -> dict:
     last_error: Optional[AIGenerationError] = None
     for attempt in range(1, attempts + 1):
         try:
-            return generate_pitch(lead_data)
+            return generate_pitch(lead_data, hook_style=hook_style)
         except AIGenerationError as exc:
             last_error = exc
             message = str(exc)
@@ -433,7 +619,7 @@ def _process_lead_offer(db: Session, lead_id: int) -> bool:
     }
 
     try:
-        pitch = _generate_pitch_with_retry(lead_data)
+        pitch = _generate_pitch_with_retry(lead_data, hook_style=getattr(config, "HOOK_STYLE", "A"))
     except AIGenerationError as exc:
         lead.offer_error = str(exc)[:500]
         db.commit()
@@ -450,13 +636,14 @@ def _process_lead_offer(db: Session, lead_id: int) -> bool:
 
 
 def _generation_worker() -> None:
-    """Фоновый поток: забирает лиды из очереди и обрабатывает по одному."""
+    """Фоновый поток из пула (параллелизм 3): забирает лиды из очереди."""
     while True:
         lead_id = _generation_queue.get()
         with _generation_lock:
             if lead_id in _generation_state["pending"]:
                 _generation_state["pending"].remove(lead_id)
-            _generation_state["current"] = lead_id
+            _generation_state["currents"].append(lead_id)
+            _generation_state["current"] = _generation_state["currents"][0]
 
         db = SessionLocal()
         try:
@@ -474,12 +661,17 @@ def _generation_worker() -> None:
         finally:
             db.close()
             with _generation_lock:
-                _generation_state["current"] = None
+                if lead_id in _generation_state["currents"]:
+                    _generation_state["currents"].remove(lead_id)
+                _generation_state["current"] = _generation_state["currents"][0] if _generation_state["currents"] else None
                 if success:
                     _generation_state["done"] += 1
                 else:
                     _generation_state["failed"] += 1
             _generation_queue.task_done()
+
+
+GENERATION_PARALLELISM = 3
 
 
 def _ensure_worker() -> None:
@@ -488,7 +680,8 @@ def _ensure_worker() -> None:
         if _worker_started:
             return
         _worker_started = True
-    threading.Thread(target=_generation_worker, daemon=True).start()
+    for _ in range(GENERATION_PARALLELISM):
+        threading.Thread(target=_generation_worker, daemon=True).start()
 
 
 @router.get("/status")
@@ -505,14 +698,14 @@ def generate_offer(lead_id: int, db: Session = Depends(get_db)):
     за прогрессом через GET /api/offers/status.
     """
     if not is_configured():
-        raise HTTPException(status_code=503, detail="Нейросеть не настроена на сервере (AI_API_URL/AI_API_KEY)")
+        raise HTTPException(status_code=503, detail="Нейросеть не настроена на сервере (AI_BASE_URL/AI_API_KEY/AI_MODEL)")
 
     lead = db.query(CallLead).filter(CallLead.id == lead_id).first()
     if not lead:
         raise HTTPException(status_code=404, detail="Лид не найден")
 
     progress = _generation_progress()
-    if lead_id == progress["current"] or lead_id in progress["pending"]:
+    if lead_id in progress.get("currents", []) or lead_id in progress["pending"]:
         return {"status": "queued", "message": "Лид уже в очереди на генерацию", "progress": progress}
 
     lead.offer_error = None

@@ -175,6 +175,13 @@ async function uploadOffersFile(file) {
   lucide.createIcons();
 
   try {
+    const previewForm = new FormData();
+    previewForm.append('file', file);
+    const previewRes = await offersFetch('/api/offers/upload/preview', { method: 'POST', body: previewForm });
+    if (previewRes.ok) {
+      const preview = await previewRes.json();
+      if (!confirm(`Предпросмотр импорта: всего ${preview.total}, новых ${preview.new}, дублей ${preview.duplicates}. Импортировать новые?`)) return;
+    }
     const res = await offersFetch('/api/offers/upload', { method: 'POST', body: formData });
     if (!res.ok) throw new Error(await offersErrorMessage(res, 'Ошибка загрузки файла'));
     const data = await res.json();
@@ -359,6 +366,27 @@ function formatPhone(value) {
   return raw;
 }
 
+const SITE_STATUS_BADGES = {
+  no_site: { label: '🚫 Нет сайта', cls: 'bg-amber-50 text-amber-700 border-amber-100' },
+  broken: { label: '💀 Сайт не работает', cls: 'bg-rose-50 text-rose-700 border-rose-100' },
+  weak: { label: '⚠️ Слабый сайт', cls: 'bg-yellow-50 text-yellow-700 border-yellow-100' },
+  ok: { label: '✅ Сайт работает', cls: 'bg-emerald-50 text-emerald-700 border-emerald-100' },
+  unknown: { label: '❔ Сайт не проверен', cls: 'bg-slate-50 text-slate-600 border-slate-200' }
+};
+
+function parseLeadPhones(lead) {
+  try {
+    const parsed = JSON.parse(lead.phones || '[]');
+    if (Array.isArray(parsed) && parsed.length) return parsed;
+  } catch (e) {}
+  return splitPhones(lead.phone).map(number => ({ number }));
+}
+
+function toggleLeadPhones(leadId) {
+  const el = document.getElementById(`lead-phones-${leadId}`);
+  if (el) el.classList.toggle('hidden');
+}
+
 function renderOffersLeads(leads) {
   const container = document.getElementById('offers-leads-list');
 
@@ -384,7 +412,10 @@ function renderOffersLeads(leads) {
     const hasOffer = Boolean(lead.offer_text);
     const siteDomain = websiteDomain(lead.website);
     const siteHref = websiteUrl(lead.website);
-    const phoneNumbers = splitPhones(lead.phone);
+    const allPhones = parseLeadPhones(lead);
+    const phoneNumbers = allPhones.slice(0, 1).map(p => p.number);
+    const siteStatus = SITE_STATUS_BADGES[lead.site_status] || SITE_STATUS_BADGES.unknown;
+    const isNetwork = Boolean(lead.branches_count && Number(lead.branches_count) > 1);
 
     return `
     <div class="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden" id="offer-lead-${lead.id}">
@@ -405,6 +436,8 @@ function renderOffersLeads(leads) {
                   ${siteDomain
                     ? `<span class="inline-block max-w-full truncate align-bottom text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-100" title="Сайт: ${esc(siteDomain)}">🌐 ${esc(siteDomain)}</span>`
                     : `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-100">🚫 без сайта</span>`}
+                  <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md border ${siteStatus.cls}">${siteStatus.label}</span>
+                  ${isNetwork ? `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100">🏢 сеть · ${esc(lead.branches_count)} точек</span>` : ''}
                   ${offersBusyLeadIds.has(lead.id) ? `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-violet-50 text-violet-700 border border-violet-100 animate-pulse">⏳ генерирую оффер…</span>` : ''}
                 </div>
               </div>
@@ -429,6 +462,9 @@ function renderOffersLeads(leads) {
           ` : `<p class="text-xs text-slate-400 italic">Телефон не указан</p>`}
 
           ${lead.address ? `<p class="text-[11px] text-slate-500 leading-snug break-words">${esc(lead.address)}</p>` : ''}
+          ${allPhones.length > 1 ? `<button onclick="toggleLeadPhones(${lead.id})" class="text-[11px] font-bold text-brand-deep hover:text-brand-blue">Показать ещё ${allPhones.length - 1} тел.</button><div id="lead-phones-${lead.id}" class="hidden space-y-1">${allPhones.slice(1).map(p => `<a href="tel:${esc(telHref(p.number))}" class="block text-sm font-bold text-brand-deep">${esc(formatPhone(p.number))}${p.extension ? ` доб. ${esc(p.extension)}` : ''}${p.is_toll_free ? ' · 8-800' : ''}</a>`).join('')}</div>` : ''}
+          ${lead.weak_points ? `<p class="text-[11px] text-amber-700 leading-snug break-words">Слабые места: ${esc(lead.weak_points)}</p>` : ''}
+          ${(lead.email || lead.telegram || lead.whatsapp || lead.vk || lead.map_url) ? `<div class="flex flex-wrap gap-1">${lead.email ? `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-slate-50 border border-slate-200">✉️ ${esc(lead.email)}</span>` : ''}${lead.telegram ? `<a href="${esc(lead.telegram)}" target="_blank" rel="noopener" class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-sky-50 text-sky-700 border border-sky-100">Telegram</a>` : ''}${lead.whatsapp ? `<a href="${esc(lead.whatsapp)}" target="_blank" rel="noopener" class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-100">WhatsApp</a>` : ''}${lead.vk ? `<a href="${esc(lead.vk)}" target="_blank" rel="noopener" class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-blue-50 text-brand-deep border border-blue-100">VK</a>` : ''}${lead.map_url ? `<a href="${esc(lead.map_url)}" target="_blank" rel="noopener" class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-violet-50 text-violet-700 border border-violet-100">Карточка на картах</a>` : ''}</div>` : ''}
           ${lead.extra_info ? `<p class="text-[10px] text-slate-400 leading-snug line-clamp-2 break-words" title="${esc(lead.extra_info)}">${esc(lead.extra_info)}</p>` : ''}
 
           <!-- Статус звонка -->
@@ -466,7 +502,7 @@ function renderOffersLeads(leads) {
                     class="p-1.5 rounded-lg bg-white border border-violet-200 hover:bg-violet-50 text-violet-600 transition-colors disabled:opacity-50">
                     <i data-lucide="refresh-cw" class="w-3 h-3"></i>
                   </button>
-                  <button onclick="copyOfferFull(${lead.id}, this)"
+                  <button onclick="openOfferScriptModal(${lead.id})" class="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-white border border-violet-200 text-violet-700 transition-colors">Скрипт</button> <button onclick="copyOfferFull(${lead.id}, this)"
                     class="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-violet-600 hover:bg-violet-700 text-white transition-colors flex items-center gap-1">
                     <i data-lucide="clipboard-copy" class="w-3 h-3"></i>
                     Скопировать скрипт
@@ -792,7 +828,7 @@ function copyOffersText(text, btn) {
   });
 }
 
-function copyOfferFull(leadId, btn) {
+function openOfferScriptModal(leadId) { const card = document.getElementById('offer-lead-' + leadId); if (!card) return; const scroll = card.querySelector('.offers-offer-scroll'); const body = document.getElementById('offer-script-modal-body'); if (!scroll || !body) return; body.innerHTML = scroll.innerHTML; const modal = document.getElementById('modal-offer-script'); if (modal) modal.classList.remove('hidden'); lucide.createIcons(); } function closeOfferScriptModal() { const modal = document.getElementById('modal-offer-script'); if (modal) modal.classList.add('hidden'); } function copyOfferFull(leadId, btn) {
   const card = document.getElementById(`offer-lead-${leadId}`);
   if (!card) return;
   const sections = card.querySelectorAll('.offers-offer-scroll > div');

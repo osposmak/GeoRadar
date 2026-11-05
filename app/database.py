@@ -57,3 +57,18 @@ def get_db():
 def init_db():
     """Initializes database tables."""
     Base.metadata.create_all(bind=engine)
+    _ensure_call_lead_columns()
+
+
+def _ensure_call_lead_columns():
+    # create_all не добавляет колонки в уже существующую таблицу — добавляем недостающие вручную
+    from sqlalchemy import inspect, text
+    inspector = inspect(engine)
+    if 'call_leads' not in inspector.get_table_names():
+        return
+    existing = {c['name'] for c in inspector.get_columns('call_leads')}
+    wanted = {'phones': 'TEXT', 'site_status': 'VARCHAR(20)', 'map_url': 'TEXT', 'email': 'VARCHAR(255)', 'telegram': 'VARCHAR(255)', 'whatsapp': 'VARCHAR(255)', 'vk': 'VARCHAR(255)', 'branches_count': 'INTEGER', 'weak_points': 'TEXT', 'source': 'VARCHAR(100)', 'checked_at': 'TIMESTAMP', 'draft_offer': 'TEXT'}
+    with engine.begin() as conn:
+        for name, ddl in wanted.items():
+            if name not in existing:
+                conn.execute(text(f'ALTER TABLE call_leads ADD COLUMN {name} {ddl}'))

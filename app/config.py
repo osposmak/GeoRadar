@@ -14,11 +14,18 @@ ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "Mair2003")
 # Срок жизни админ-сессии (в секундах). По истечении потребуется повторный вход.
 ADMIN_SESSION_TTL = int(os.environ.get("ADMIN_SESSION_TTL", str(12 * 60 * 60)))
 
-# ---------- Нейросеть для генерации офферов ----------
+# ---------- Нейросеть для генерации офферов (провайдер Zexkora) ----------
 # OpenAI-совместимый эндпоинт (…/v1), к которому добавляется /chat/completions.
-AI_API_URL = os.environ.get("AI_API_URL", "https://api.atria-asi.ai/v1").rstrip("/")
-AI_API_KEY = os.environ.get("AI_API_KEY", "atr_XypP3FFfeBZE3EwgTgZnxcImplPbs6x5")
-AI_MODEL = os.environ.get("AI_MODEL", "Atria-Dawn-Preview")
+# Адрес, ключ и модель задаются только переменными окружения: AI_BASE_URL / AI_API_KEY / AI_MODEL.
+AI_BASE_URL = os.environ.get("AI_BASE_URL", "").rstrip("/")
+AI_API_KEY = os.environ.get("AI_API_KEY", "")
+AI_MODEL = os.environ.get("AI_MODEL", "")
+
+# ---------- Профиль продавца для офферов (задача C) ----------
+SELLER_NAME = os.environ.get("SELLER_NAME", "")
+SELLER_ROLE = os.environ.get("SELLER_ROLE", "веб-разработчик")
+SELLER_SERVICES = os.environ.get("SELLER_SERVICES", "")
+HOOK_STYLE = os.environ.get("HOOK_STYLE", "A")
 
 # Таймауты запроса к нейросети (сек): подключение / чтение.
 # Чтение — с запасом: reasoning-модель может думать над шаблоном несколько минут.

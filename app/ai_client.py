@@ -1,8 +1,8 @@
 """
 Клиент нейросети для генерации офферов холодного обзвона.
 
-Работает с OpenAI-совместимым API (POST {AI_API_URL}/chat/completions).
-Модель: Atria-Dawn-Preview (reasoning-модель). Ключ и адрес задаются в app/config.py.
+Провайдер: Zexkora, OpenAI-совместимый API (POST {AI_BASE_URL}/chat/completions).
+Адрес, ключ и модель задаются переменными окружения AI_BASE_URL / AI_API_KEY / AI_MODEL (см. app/config.py).
 """
 import json
 import re
@@ -99,6 +99,30 @@ USER_PROMPT_TEMPLATE = """Составь готовый шаблон холод�
 - Ничего не выдумывай сверх данных."""
 
 
+HOOK_STYLES = {
+    "A": "A — прямое наблюдение по карточке",
+    "B": "B — потеря: что бизнес теряет из-за этого факта",
+    "C": "C — вопрос про ситуацию бизнеса",
+    "D": "D — обобщённый пример похожего бизнеса из смежной ниши",
+}
+
+
+def _load_system_prompt() -> str:
+    """Системный промпт из prompts/offer.system.md; fallback — встроенный SYSTEM_PROMPT."""
+    import os
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "prompts", "offer.system.md")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read().strip()
+        if text:
+            return (text.replace("{{seller_name}}", config.SELLER_NAME or "не указано")
+                        .replace("{{seller_role}}", config.SELLER_ROLE)
+                        .replace("{{seller_services}}", config.SELLER_SERVICES or "не указано"))
+    except OSError:
+        pass
+    return SYSTEM_PROMPT
+
+
 def _extract_json(text: str) -> dict:
     """Достаёт JSON из ответа модели (устойчиво к ```json-обёрткам и мусору)."""
     cleaned = text.strip()
@@ -128,7 +152,7 @@ def _extract_json(text: str) -> dict:
     raise AIGenerationError("Не удалось разобрать JSON из ответа нейросети")
 
 
-def generate_pitch(lead: dict) -> dict:
+def generate_pitch(lead: dict, hook_style: str = "A") -> dict:
     """
     Генерирует оффер для лида. Возвращает dict с ключами
     hook / offer / objections / closing. Бросает AIGenerationError при сбое.
@@ -145,11 +169,11 @@ def generate_pitch(lead: dict) -> dict:
     payload = {
         "model": config.AI_MODEL,
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": _load_system_prompt() + "\n\nВыбранный hookStyle: " + HOOK_STYLES.get(str(hook_style or "A").upper(), HOOK_STYLES["A"]) + ". Верни этот стиль в поле hookStyle."},
             {"role": "user", "content": user_prompt}
         ],
         "temperature": 0.7,
-        # Atria-Dawn-Preview — reasoning-модель: сначала «думает» в
+        # Модель Zexkora — reasoning-модель: сначала «думает» в
         # reasoning_content, затем пишет ответ. Лимит должен покрывать
         # размышления плюс готовый шаблон разговора с возражениями,
         # иначе content приходит пустым с finish_reason="length".
@@ -162,7 +186,7 @@ def generate_pitch(lead: dict) -> dict:
 
     try:
         response = httpx.post(
-            f"{config.AI_API_URL}/chat/completions",
+            f"{config.AI_BASE_URL}/chat/completions",
             json=payload,
             headers=headers,
             timeout=httpx.Timeout(config.AI_READ_TIMEOUT, connect=config.AI_CONNECT_TIMEOUT)
@@ -189,6 +213,7 @@ def generate_pitch(lead: dict) -> dict:
 
     result = {
         "hook": str(parsed.get("hook") or parsed.get("opening") or "").strip(),
+        "hook_style": str(parsed.get("hookStyle") or hook_style or "A").strip().upper(),
         "offer": str(
             parsed.get("offer")
             or parsed.get("script")
@@ -201,11 +226,11 @@ def generate_pitch(lead: dict) -> dict:
     }
 
     # Если модель вернула текст не по полям — кладём всё в offer, чтобы не терять ответ
-    if not any(result.values()):
+    if not any([result["hook"], result["offer"], result["objections"], result["closing"]]):
         result["offer"] = content.strip()[:4000]
 
     return result
 
 
 def is_configured() -> bool:
-    return bool(config.AI_API_URL and config.AI_API_KEY and config.AI_MODEL)
+    return bool(config.AI_BASE_URL and config.AI_API_KEY and config.AI_MODEL)

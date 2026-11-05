@@ -110,6 +110,18 @@ class CallLead(Base):
     niche = Column(String(150), nullable=True)
     address = Column(String(255), nullable=True)
     website = Column(String(255), nullable=True)
+    phones = Column(Text, nullable=True)                        # JSON-список нормализованных телефонов из normalize_phones
+    site_status = Column(String(20), nullable=True, index=True)  # no_site / broken / weak / ok / unknown
+    map_url = Column(Text, nullable=True)                       # Ссылка на карты (2ГИС/Яндекс)
+    email = Column(String(255), nullable=True)
+    telegram = Column(String(255), nullable=True)
+    whatsapp = Column(String(255), nullable=True)
+    vk = Column(String(255), nullable=True)
+    branches_count = Column(Integer, nullable=True)             # Точек в городе
+    weak_points = Column(Text, nullable=True)                   # Слабые места сайта
+    source = Column(String(100), nullable=True)                 # Источник (2ГИС и т.д.)
+    checked_at = Column(DateTime, nullable=True)                # Дата проверки из файла
+    draft_offer = Column(Text, nullable=True)                   # Готовый оффер для звонка из файла
     extra_info = Column(Text, nullable=True)                       # Прочие колонки из таблицы (сырой текст)
 
     # Результат генерации нейросети

@@ -69,6 +69,14 @@ def serve_home():
     index_file = os.path.join(STATIC_DIR, "index.html")
     return FileResponse(index_file)
 
+@app.get("/api/ai/status")
+def ai_status():
+    """Статус AI-провайдера Zexkora без раскрытия ключа."""
+    from app import config
+    from app.ai_client import is_configured
+    return {"provider": "Zexkora", "configured": is_configured(), "base_url": config.AI_BASE_URL or None, "model": config.AI_MODEL or None}
+
+
 @app.get("/health")
 def health_check():
     return {"status": "ok", "app": "GeoRadar CRM", "version": "1.0.0"}
