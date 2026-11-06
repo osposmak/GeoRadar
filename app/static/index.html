@@ -157,7 +157,7 @@
                 <div class="relative flex-1">
                   <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1 px-1">Город</label>
                   <div class="relative">
-                    <i data-lucide="map-pin" class="w-4 h-4 absolute left-3 top-3 text-brand-blue"></i>
+                    <i data-lucide="map-pin" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-brand-blue"></i>
                     <input type="text" id="radar-city-input" list="cities-datalist" placeholder="Например: Тюмень" required
                       class="w-full pl-9 pr-3 py-2 bg-slate-50 hover:bg-slate-100/80 focus:bg-white text-slate-900 rounded-xl border border-slate-200 focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20 outline-none text-xs font-bold transition-all">
                   </div>
@@ -167,7 +167,7 @@
                 <div class="relative flex-1">
                   <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1 px-1">Ниша / Сфера</label>
                   <div class="relative">
-                    <i data-lucide="briefcase" class="w-4 h-4 absolute left-3 top-3 text-brand-blue"></i>
+                    <i data-lucide="briefcase" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-brand-blue"></i>
                     <input type="text" id="radar-niche-input" list="niches-datalist" placeholder="Например: Мебель" required
                       class="w-full pl-9 pr-3 py-2 bg-slate-50 hover:bg-slate-100/80 focus:bg-white text-slate-900 rounded-xl border border-slate-200 focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20 outline-none text-xs font-bold transition-all">
                   </div>
@@ -332,7 +332,7 @@
           
           <!-- Search box -->
           <div class="relative lg:col-span-2">
-            <i data-lucide="search" class="w-4 h-4 absolute left-3 top-3 text-slate-400"></i>
+            <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
             <input type="text" id="filter-search" oninput="debounceFilter()" placeholder="Поиск по городу, нише, заметке..."
               class="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-brand-blue outline-none transition-all">
           </div>
@@ -505,7 +505,7 @@
               <div>
                 <label class="block font-bold text-slate-700 mb-1 text-xs">Логин</label>
                 <div class="relative">
-                  <i data-lucide="user" class="w-4 h-4 absolute left-3 top-3 text-slate-400"></i>
+                  <i data-lucide="user" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
                   <input type="text" id="offers-login-username" required autocomplete="username"
                     class="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:bg-white focus:border-violet-400 outline-none transition-all"
                     placeholder="Администратор">
@@ -514,7 +514,7 @@
               <div>
                 <label class="block font-bold text-slate-700 mb-1 text-xs">Пароль</label>
                 <div class="relative">
-                  <i data-lucide="key-round" class="w-4 h-4 absolute left-3 top-3 text-slate-400"></i>
+                  <i data-lucide="key-round" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
                   <input type="password" id="offers-login-password" required autocomplete="current-password"
                     class="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:bg-white focus:border-violet-400 outline-none transition-all"
                     placeholder="••••••••">
@@ -611,7 +611,7 @@
           <!-- Фильтры и действия -->
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
             <div class="relative lg:col-span-2">
-              <i data-lucide="search" class="w-4 h-4 absolute left-3 top-3 text-slate-400"></i>
+              <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
               <input type="text" id="offers-search" oninput="debounceOffersFilter()" placeholder="Поиск по компании, телефону, нише…"
                 class="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-violet-400 outline-none transition-all">
             </div>
@@ -948,7 +948,7 @@
 
   <!-- Footer -->
   <footer class="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-400 mt-auto">
-    <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2">
       <div class="flex items-center gap-2">
         <img src="/static/img/favicon.png" alt="Icon" class="w-4 h-4 object-contain">
         <span class="font-bold text-slate-700">GeoRadar CRM v1.2</span>
@@ -963,7 +963,7 @@
 
   <!-- Main JavaScript Application Logic -->
   <script src="/static/js/app.js?v=20261106"></script>
-  <script src="/static/js/offers.js?v=20261106"></script>
+  <script src="/static/js/offers.js?v=20261106-2"></script>
   <script src="/static/js/parser.js?v=20261106"></script>
 </body>
 </html>

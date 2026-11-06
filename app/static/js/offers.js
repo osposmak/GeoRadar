@@ -435,7 +435,7 @@ function renderOffersLeads(leads) {
                   ${lead.city ? `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-slate-50 text-slate-600 border border-slate-200">📍 ${esc(lead.city)}</span>` : ''}
                   ${siteDomain
                     ? `<span class="inline-block max-w-full truncate align-bottom text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-100" title="Сайт: ${esc(siteDomain)}">🌐 ${esc(siteDomain)}</span>`
-                    : `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-100">🚫 без сайта</span>`}
+                    : ''}
                   <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md border ${siteStatus.cls}">${siteStatus.label}</span>
                   ${isNetwork ? `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100">🏢 сеть · ${esc(lead.branches_count)} точек</span>` : ''}
                   ${offersBusyLeadIds.has(lead.id) ? `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-violet-50 text-violet-700 border border-violet-100 animate-pulse">⏳ генерирую оффер…</span>` : ''}
