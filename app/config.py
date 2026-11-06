@@ -28,9 +28,10 @@ SELLER_SERVICES = os.environ.get("SELLER_SERVICES", "")
 HOOK_STYLE = os.environ.get("HOOK_STYLE", "A")
 
 # Таймауты запроса к нейросети (сек): подключение / чтение.
-# Чтение — с запасом: reasoning-модель может думать над шаблоном несколько минут.
-AI_CONNECT_TIMEOUT = 20
-AI_READ_TIMEOUT = 300
+# Чтение — с большим запасом: reasoning-модель может думать над шаблоном несколько минут,
+# короткий лимит обрывал генерацию, и фронт уходил в повторные обновления списка.
+AI_CONNECT_TIMEOUT = int(os.environ.get("AI_CONNECT_TIMEOUT", "30"))
+AI_READ_TIMEOUT = int(os.environ.get("AI_READ_TIMEOUT", "600"))
 
 # Лимиты загрузки таблиц
 UPLOAD_MAX_ROWS = 2000

@@ -58,6 +58,7 @@ def init_db():
     """Initializes database tables."""
     Base.metadata.create_all(bind=engine)
     _ensure_call_lead_columns()
+    _ensure_company_columns()
 
 
 def _ensure_call_lead_columns():
@@ -72,3 +73,17 @@ def _ensure_call_lead_columns():
         for name, ddl in wanted.items():
             if name not in existing:
                 conn.execute(text(f'ALTER TABLE call_leads ADD COLUMN {name} {ddl}'))
+
+
+def _ensure_company_columns():
+    # create_all не добавляет колонки в уже существующую таблицу companies — добавляем недостающие вручную
+    from sqlalchemy import inspect, text
+    inspector = inspect(engine)
+    if 'companies' not in inspector.get_table_names():
+        return
+    existing = {c['name'] for c in inspector.get_columns('companies')}
+    wanted = {'category': 'VARCHAR(150)', 'map_url': 'TEXT'}
+    with engine.begin() as conn:
+        for name, ddl in wanted.items():
+            if name not in existing:
+                conn.execute(text(f'ALTER TABLE companies ADD COLUMN {name} {ddl}'))

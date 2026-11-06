@@ -109,6 +109,8 @@ function switchTab(tab) {
     loadStatsSummary();
   } else if (tab === 'offers') {
     initOffersTab();
+  } else if (tab === 'about') {
+    if (typeof initParserTab === 'function') initParserTab();
   }
 
   lucide.createIcons();

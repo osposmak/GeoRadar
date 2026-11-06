@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import SessionLocal, init_db
 from app.seed_data import seed_sample_data
-from app.routers import check, parses, analytics, export, auth, offers
+from app.routers import check, parses, analytics, export, auth, offers, parser
 
 app = FastAPI(
     title="GeoRadar CRM - Контроль парсинга гео-сервисов",
@@ -30,6 +30,7 @@ app.include_router(analytics.router)
 app.include_router(export.router)
 app.include_router(auth.router)
 app.include_router(offers.router)
+app.include_router(parser.router)
 
 # Пути к статическим файлам
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))

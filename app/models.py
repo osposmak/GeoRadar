@@ -65,6 +65,8 @@ class Company(Base):
     rating = Column(Float, nullable=True)
     reviews_count = Column(Integer, default=0)
     source = Column(String(50), nullable=True)
+    category = Column(String(150), nullable=True)
+    map_url = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     parse_record = relationship("ParseRecord", back_populates="companies")

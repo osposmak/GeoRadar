@@ -645,8 +645,9 @@
       </div>
     </section>
 
-    <!-- TAB 4: ИНСТРУМЕНТЫ (В РАЗРАБОТКЕ) -->
+    <!-- TAB 4: ИНСТРУМЕНТЫ -->
     <section id="tab-about" class="hidden space-y-6">
+      <div class='bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-5'> <div class='flex items-start justify-between gap-3 flex-wrap'> <div> <h2 class='text-xl font-black text-slate-900'>Парсер лидов 2ГИС + Яндекс</h2> <p class='text-xs text-slate-500 mt-1 max-w-xl'>Умный поиск из расширения MapLeads Audit: сайт готовит запрос и открывает карты, сбор на картах выполняет расширение в вашем браузере, а результат возвращается сюда — дубли 2ГИС и Яндекс склеиваются автоматически, сбор сохраняется в «Журнал сборов», экспорт сразу подходит для вкладки «AI Офферы».</p> </div> <span class='text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200'>MapLeads Audit v2.4.1</span> </div> <div class='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs'> <div> <label class='block font-bold text-slate-700 mb-1'>Ниша</label> <select id='parser-niche' onchange='parserUpdatePreview()' class='w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold outline-none focus:border-brand-blue'></select> <input type='text' id='parser-niche-custom' oninput='parserUpdatePreview()' placeholder='Или своя ниша / запрос' class='mt-2 w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium outline-none focus:border-brand-blue'> </div> <div> <label class='block font-bold text-slate-700 mb-1'>Город</label> <select id='parser-city' onchange='parserUpdatePreview()' class='w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold outline-none focus:border-brand-blue'></select> <input type='text' id='parser-city-custom' oninput='parserUpdatePreview()' placeholder='Или свой город' class='mt-2 w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium outline-none focus:border-brand-blue'> </div> <div> <label class='block font-bold text-slate-700 mb-1'>Сервис</label> <select id='parser-service' class='w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold outline-none focus:border-brand-blue'> <option value='both' selected>2ГИС + Яндекс (оба)</option> <option value='2gis'>Только 2ГИС</option> <option value='yandex'>Только Яндекс Карты</option> </select> <p class='mt-2 text-[11px] text-slate-400'>Запрос: <b id='parser-query-preview' class='text-slate-600'></b></p> </div> <div class='flex items-end'> <button onclick='parserStartRun()' class='w-full px-4 py-2.5 bg-gradient-to-r from-brand-deep to-brand-blue text-white rounded-xl font-bold shadow-xs flex items-center justify-center gap-1.5'>Запустить сбор</button> </div> </div> <div id='parser-progress-box' class='hidden p-3.5 rounded-2xl bg-blue-50 border border-blue-200 space-y-2'> <div class='h-2 bg-blue-200/70 rounded-full overflow-hidden'><div id='parser-progress-bar' class='h-full bg-gradient-to-r from-brand-deep to-brand-blue rounded-full transition-all duration-300' style='width:0%'></div></div> <p id='parser-progress-text' class='text-[11px] text-brand-deep font-medium'></p> <div id='parser-open-links' class='hidden flex flex-wrap gap-2 pt-1'></div> </div> <div id='parser-import-box' class='hidden p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3 text-xs'> <p class='font-bold text-slate-700'>Шаг 2 — вернуть результат из расширения</p> <p class='text-slate-500'>В расширении на странице карт запустите сбор, скачайте CSV или скопируйте JSON базы, затем загрузите файл или вставьте данные ниже. Excel (.xlsx) из расширения браузер здесь не разбирает — для него в расширении выберите CSV.</p> <div class='flex flex-wrap items-center gap-2'> <label class='px-3 py-2 bg-white border border-slate-300 rounded-xl font-bold cursor-pointer hover:bg-slate-100'>Загрузить CSV / JSON <input type='file' accept='.csv,.json' class='hidden' onchange='parserHandleFile(this)'></label> <button onclick='parserLoadDemoLeads()' class='px-3 py-2 bg-white border border-slate-300 rounded-xl font-bold hover:bg-slate-100'>Демо-результат для проверки склейки</button> </div> <textarea id='parser-json-input' rows='3' placeholder='Или вставьте сюда JSON / CSV из расширения…' class='w-full px-3 py-2 bg-white border border-slate-200 rounded-xl font-medium outline-none focus:border-brand-blue'></textarea> <button onclick='parserImportFromTextarea()' class='px-4 py-2 bg-brand-blue hover:bg-brand-deep text-white rounded-xl font-bold'>Импортировать и склеить дубли</button> </div> <div id='parser-results-box' class='hidden space-y-3'> <div id='parser-stats' class='grid grid-cols-2 sm:grid-cols-4 gap-3'></div> <div class='flex flex-wrap items-center justify-between gap-2'> <h3 class='font-black text-sm text-slate-900'>Результаты: <span id='parser-results-count'>0</span></h3> <div class='flex gap-2'> <button onclick="parserDownload('xlsx')" class='px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold'>Скачать Excel для AI Офферов</button> <button onclick="parserDownload('csv')" class='px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold'>Скачать CSV</button> </div> </div> <div class='overflow-x-auto rounded-2xl border border-slate-200'> <table class='w-full text-xs min-w-[900px]'> <thead><tr class='bg-slate-50 text-left text-slate-500 uppercase text-[10px] tracking-wide'> <th class='py-2.5 px-4'>Компания</th><th class='py-2.5 px-4'>Адрес</th><th class='py-2.5 px-4'>Телефон</th><th class='py-2.5 px-4'>Сайт</th><th class='py-2.5 px-4'>Рейтинг</th><th class='py-2.5 px-4'>Категория</th><th class='py-2.5 px-4'>Карточка</th><th class='py-2.5 px-4'>Источник</th> </tr></thead> <tbody id='parser-table-body'></tbody> </table> </div> </div> </div>
       
       <div class="bg-white p-6 sm:p-10 rounded-3xl border border-slate-200 shadow-sm text-center relative overflow-hidden">
         
@@ -659,16 +660,16 @@
           <!-- Badge -->
           <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-50 border border-blue-200 text-brand-deep text-xs font-bold shadow-2xs">
             <span class="w-2 h-2 rounded-full bg-brand-blue animate-ping"></span>
-            <span>🏗️ Скоро открытие новых модулей</span>
+            <span>✅ Парсер лидов уже работает — остальные модули в разработке</span>
           </div>
 
           <!-- Title & Subtitle -->
           <div class="space-y-2">
             <h2 class="text-2xl sm:text-4xl font-black text-slate-900 tracking-tight">
-              В разработке
+              Дальше — ещё инструменты
             </h2>
             <p class="text-xs sm:text-sm text-slate-600 leading-relaxed max-w-lg mx-auto">
-              Здесь строятся новые специализированные инструменты для работы с базами: автопарсеры по расписанию, обогащение контактов и B2B CRM панель.
+              Первый инструмент раздела — «Парсер лидов 2ГИС + Яндекс» выше — уже работает. Здесь строятся следующие специализированные инструменты для работы с базами: автопарсеры по расписанию, обогащение контактов и B2B CRM панель.
             </p>
           </div>
 
@@ -726,9 +727,9 @@
               <div class="w-8 h-8 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center font-bold text-sm">
                 <i data-lucide="git-merge" class="w-4 h-4"></i>
               </div>
-              <h4 class="font-bold text-xs text-slate-900">Умная склейка дублей</h4>
+              <h4 class="font-bold text-xs text-slate-900">Умная склейка дублей ✅</h4>
               <p class="text-[11px] text-slate-500 leading-relaxed">
-                Автоматическое слияние карточек из 2ГИС и Яндекс Карт в единую чистую организацию без повторов.
+                Уже работает в парсере выше: автоматическое слияние карточек из 2ГИС и Яндекс Карт в единую чистую организацию без повторов.
               </p>
             </div>
 
@@ -961,7 +962,8 @@
   </footer>
 
   <!-- Main JavaScript Application Logic -->
-  <script src="/static/js/app.js?v=20260917"></script>
-  <script src="/static/js/offers.js?v=20260917"></script>
+  <script src="/static/js/app.js?v=20261106"></script>
+  <script src="/static/js/offers.js?v=20261106"></script>
+  <script src="/static/js/parser.js?v=20261106"></script>
 </body>
 </html>

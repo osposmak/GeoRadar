@@ -1,0 +1,53 @@
+[
+  {
+    "category": "Города-миллионники (Максимум лидов)",
+    "tip": "Огромная концентрация компаний без сайтов, но выше конкуренция среди веб-студий. Рекомендуется делать акцент на узкие ниши.",
+    "items": [
+      { "name": "Москва", "population": "13.1 млн", "competitiveness": "Высокая", "potential": "Максимальный" },
+      { "name": "Санкт-Петербург", "population": "5.6 млн", "competitiveness": "Высокая", "potential": "Очень высокий" },
+      { "name": "Новосибирск", "population": "1.6 млн", "competitiveness": "Средняя", "potential": "Высокий" },
+      { "name": "Екатеринбург", "population": "1.5 млн", "competitiveness": "Средняя+", "potential": "Высокий" },
+      { "name": "Казань", "population": "1.3 млн", "competitiveness": "Средняя+", "potential": "Высокий" },
+      { "name": "Нижний Новгород", "population": "1.2 млн", "competitiveness": "Средняя", "potential": "Высокий" },
+      { "name": "Красноярск", "population": "1.2 млн", "competitiveness": "Средняя", "potential": "Высокий" },
+      { "name": "Челябинск", "population": "1.2 млн", "competitiveness": "Средняя", "potential": "Высокий" },
+      { "name": "Самара", "population": "1.1 млн", "competitiveness": "Средняя", "potential": "Высокий" },
+      { "name": "Уфа", "population": "1.1 млн", "competitiveness": "Средняя", "potential": "Высокий" },
+      { "name": "Ростов-на-Дону", "population": "1.1 млн", "competitiveness": "Средняя+", "potential": "Высокий" },
+      { "name": "Омск", "population": "1.1 млн", "competitiveness": "Умеренная", "potential": "Высокий" },
+      { "name": "Воронеж", "population": "1.05 млн", "competitiveness": "Умеренная", "potential": "Высокий" },
+      { "name": "Пермь", "population": "1.03 млн", "competitiveness": "Умеренная", "potential": "Высокий" },
+      { "name": "Волгоград", "population": "1.0 млн", "competitiveness": "Умеренная", "potential": "Высокий" }
+    ]
+  },
+  {
+    "category": "Идеальный баланс (300k - 1 млн жителей)",
+    "tip": "🔥 Лучший выбор для холодных продаж! Местные предприниматели охотно идут на контакт, а спама от веб-разработчиков в разы меньше.",
+    "items": [
+      { "name": "Краснодар", "population": "1.1 млн", "competitiveness": "Средняя", "potential": "🔥 Огонь (строительство, услуги)" },
+      { "name": "Тюмень", "population": "850 тыс.", "competitiveness": "Средняя", "potential": "🔥 Богатый регион, высокая маржа" },
+      { "name": "Сочи", "population": "450 тыс.", "competitiveness": "Средняя", "potential": "🔥 Туризм, аренда, рестораны" },
+      { "name": "Иркутск", "population": "610 тыс.", "competitiveness": "Низкая", "potential": "Отличный" },
+      { "name": "Хабаровск", "population": "615 тыс.", "competitiveness": "Низкая", "potential": "Отличный" },
+      { "name": "Владивосток", "population": "600 тыс.", "competitiveness": "Средняя", "potential": "Авто, логистика, услуги" },
+      { "name": "Ярославль", "population": "570 тыс.", "competitiveness": "Низкая+", "potential": "Высокая конверсия" },
+      { "name": "Оренбург", "population": "540 тыс.", "competitiveness": "Низкая", "potential": "Свободный рынок" },
+      { "name": "Рязань", "population": "530 тыс.", "competitiveness": "Низкая+", "potential": "Близко к столице" },
+      { "name": "Тула", "population": "470 тыс.", "competitiveness": "Низкая+", "potential": "Производство и услуги" },
+      { "name": "Калининград", "population": "490 тыс.", "competitiveness": "Средняя", "potential": "Европейский стиль, туризм" },
+      { "name": "Сургут", "population": "400 тыс.", "competitiveness": "Низкая", "potential": "🔥 Высокие средние чеки" },
+      { "name": "Смоленск", "population": "315 тыс.", "competitiveness": "Низкая", "potential": "Очень открытые к диалогу" },
+      { "name": "Калуга", "population": "340 тыс.", "competitiveness": "Низкая+", "potential": "Развитый авто/пром кластер" }
+    ]
+  },
+  {
+    "category": "Казахстан и Беларусь",
+    "tip": "В 2ГИС и Яндекс Картах в Казахстане и Беларуси огромное количество активных компаний без сайтов, которые используют только WhatsApp и Telegram/VK.",
+    "items": [
+      { "name": "Алматы", "population": "2.2 млн", "competitiveness": "Средняя", "potential": "🔥 Огромный рынок (2GIS топ)" },
+      { "name": "Астана", "population": "1.4 млн", "competitiveness": "Средняя", "potential": "Столичные бюджеты" },
+      { "name": "Шымкент", "population": "1.2 млн", "competitiveness": "Низкая", "potential": "Торговля и услуги" },
+      { "name": "Минск", "population": "2.0 млн", "competitiveness": "Средняя", "potential": "Отличный рынок" }
+    ]
+  }
+]

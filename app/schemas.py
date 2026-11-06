@@ -155,3 +155,41 @@ class LoginResponse(BaseModel):
     token: str
     username: str
     expires_at: datetime
+
+
+# -------------------------------------------------------------
+# Схемы парсера лидов 2ГИС + Яндекс (раздел «Инструменты»)
+# -------------------------------------------------------------
+
+class ParserLead(BaseModel):
+    name: str
+    address: Optional[str] = None
+    phones: List[str] = []
+    website: Optional[str] = None
+    rating: Optional[float] = None
+    reviews_count: Optional[int] = None
+    category: Optional[str] = None
+    map_url: Optional[str] = None
+    map_urls: List[str] = []
+    source: Optional[str] = None
+    city: Optional[str] = None
+    niche: Optional[str] = None
+    email: Optional[str] = None
+    telegram: Optional[str] = None
+    whatsapp: Optional[str] = None
+    vk: Optional[str] = None
+
+
+class ParserRunCreate(BaseModel):
+    city: str
+    niche: str
+    service: str = "both"
+    operator_name: str = "Менеджер"
+
+
+class ParserImportRequest(BaseModel):
+    leads: List[ParserLead] = []
+    city: Optional[str] = None
+    niche: Optional[str] = None
+    service: str = "both"
+    operator_name: str = "Менеджер"

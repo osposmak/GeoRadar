@@ -14,6 +14,11 @@ ENV/
 data/*.db-wal
 data/*.db-shm
 data/*.db-journal
+data/*.db.bak-*
+data/dump.sql
+data/dump.log
+data/recover.sql
+data/recover.log
 
 # OS files
 Thumbs.db
